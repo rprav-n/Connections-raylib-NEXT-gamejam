@@ -4,7 +4,7 @@
 
 #define GAME_WIDTH 128.f
 #define GAME_HEIGHT 128.f
-#define SCALE_FACTOR 4.f
+#define SCALE_FACTOR 6.f
 #define CELL_SIZE 16.f
 #define WINDOW_WIDTH (SCALE_FACTOR * GAME_WIDTH)
 #define WINDOW_HEIGHT (SCALE_FACTOR * GAME_HEIGHT)
@@ -16,6 +16,8 @@
 #define BOX_COUNT 16
 #define START (CELL_SIZE * SPACING)
 #define END (BOX_COUNT * ROWS)
+#define TOTAL_PUZZLES 1
+#define FIRE_MOVE_SPEED 8.f
 
 enum Direction
 {
@@ -55,6 +57,13 @@ struct Box
 
 };
 
+struct Puzzle
+{
+	int puzzleGrid[ROWS][ROWS];
+	int answerGrid[ROWS][ROWS];
+	bool isCorrect;
+};
+
 
 void RotateBox(struct Box* box);
 int GetBoxIndexByPos(struct Box boxes[BOX_COUNT], Vector2 pos);
@@ -64,43 +73,56 @@ void CheckForAdjacentBox(struct Box boxes[BOX_COUNT], struct Box* box, Vector2 p
 int main()
 {
 
-	bool isCorrect = true;
-
 	InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Pipe Connections");
 
-	Texture2D atlasTexture = LoadTexture("..\\..\\pipe_test_tile.png");
+	Texture2D atlasTexture = LoadTexture("..\\..\\atlas.png");
 
 	RenderTexture2D renderTexture = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
 	SetTextureFilter(renderTexture.texture, TEXTURE_FILTER_POINT);
 
 	SetTargetFPS(FPS);
 
+	Shader shader = LoadShader(NULL, "fire.fs");
+	Texture2D noiseTexture = LoadTexture("..\\..\\noise.png");
+
+	SetShaderValue(shader, GetShaderLocation(shader, "flameColor"), (float[3]) { 1.0f, 0.5f, 0.0f }, SHADER_UNIFORM_VEC3);
+	SetShaderValue(shader, GetShaderLocation(shader, "animationSpeed"), (float[1]) { 0.5f }, SHADER_UNIFORM_FLOAT);
+
+	Rectangle fireSource = (Rectangle){
+		.x = 0.f, 
+		.y = 32.f,
+		.width = GAME_WIDTH,
+		.height = GAME_HEIGHT,
+	};
+
+	Rectangle fireDest = (Rectangle){
+		.x = 0.f,
+		.y = GAME_HEIGHT,
+		.width = GAME_WIDTH,
+		.height = GAME_HEIGHT,
+	};
+
 	struct Player player = {
 		.pos = (Vector2){ (float)START, (float)START }
 	};
+	
+	struct Puzzle puzzles[TOTAL_PUZZLES];
 
-	int puzzles[1][ROWS][ROWS];
-
-	int puzzle[ROWS][ROWS] = {
-		{3, 1, 2, 1},
-		{7, 12, 5, 5},
-		{12, 8, 10, 7},
-		{3, 12, 4, 11},
-	};
-
-	for (int i = 0; i < ROWS; i++)
-	{
-		for (int j = 0; j < ROWS; j++)
-		{
-			puzzles[0][i][j] = puzzle[i][j];
-		}
-	}
-
-	enum Direction correctDirections[ROWS][ROWS] = {
-		{0, 3, 0, 1},
-		{3, 1, 2, 1},
-		{2, 3, 3, 3},
-		{3, 3, 0, 3}
+	int currentPuzzleIndex = 0;
+	puzzles[0] = (struct Puzzle){
+		.puzzleGrid = {
+			{3, 1, 2, 1},
+			{7, 12, 5, 5},
+			{12, 8, 10, 7},
+			{3, 12, 4, 11},
+		},
+		.answerGrid = {
+			{0, 3, 0, 1},
+			{3, 1, 2, 1},
+			{2, 3, 3, 3},
+			{3, 3, 0, 3}
+		},
+		.isCorrect = false,
 	};
 
 	struct Box boxes[BOX_COUNT];
@@ -109,7 +131,7 @@ int main()
 	{
 		for (int j = 0; j < ROWS; j++)
 		{
-			int id = puzzle[i][j];
+			int id = puzzles[currentPuzzleIndex].puzzleGrid[i][j];
 			int index = (i * ROWS) + j;
 
 			struct Box box = {
@@ -136,8 +158,30 @@ int main()
 		}
 	}
 
+	float time = 0.0f;
+	float fireYoffset = 1.f;
+
 	while (!WindowShouldClose())
 	{
+		float dt = GetFrameTime();
+		time += dt;
+
+		SetShaderValue(shader, GetShaderLocation(shader, "time"), &time, SHADER_UNIFORM_FLOAT);
+		SetShaderValue(shader, GetShaderLocation(shader, "yOffset"), (float[1]) { fireYoffset }, SHADER_UNIFORM_FLOAT);
+
+		if (!puzzles[currentPuzzleIndex].isCorrect)
+		{
+
+			fireYoffset = Vector2MoveTowards((Vector2) { 0.f, fireYoffset }, (Vector2) { 0.f, -0.25f }, dt * 0.075f).y;
+
+			if (fireYoffset <= -0.25f)
+			{
+				// TODO Lost
+			}
+		}
+
+
+
 		Vector2 visited[BOX_COUNT];
 		for (int i = 0; i < BOX_COUNT; i++)
 		{
@@ -165,9 +209,11 @@ int main()
 					CELL_SIZE,
 					CELL_SIZE
 				};
+
 				boxes[index].origin = (Vector2){ boxes[index].dest.width / 2.f, boxes[index].dest.height / 2.f };
 
-				if (boxes[index].x == gridPosition.x - 2 && boxes[index].y == gridPosition.y - 2 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !isCorrect)
+				if (boxes[index].x == gridPosition.x - 2 && boxes[index].y == gridPosition.y - 2 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) 
+					&& !puzzles[currentPuzzleIndex].isCorrect)
 				{
 					RotateBox(&boxes[index]);
 				}
@@ -198,18 +244,23 @@ int main()
 		}
 
 		// check for solution
-		isCorrect = true;
+		puzzles[currentPuzzleIndex].isCorrect = true;
 		for (int i = 0; i < BOX_COUNT; i++)
 		{
 			if (!boxes[i].isWaterConnected)
 			{
-				isCorrect = false;
+				puzzles[currentPuzzleIndex].isCorrect = false;
 			}
 		}
 
-
 		BeginTextureMode(renderTexture);
 		ClearBackground(RAYWHITE);
+
+		// Draw fire
+		BeginShaderMode(shader);
+		DrawTexture(noiseTexture, 0, 0, WHITE); // Apply shader to the texture
+		EndShaderMode();
+		//DrawTexturePro(atlasTexture, fireSource, fireDest, (Vector2) { 0.f, 0.f }, 0.f, (Color) { 255, 255, 255, 200 });
 
 		// Draw rectangle backgrounds
 		for (int x = SPACING; x < TOTAL_COUNT - SPACING; x++)
@@ -264,7 +315,7 @@ int main()
 
 		DrawRectangleLines(player.pos.x, player.pos.y, CELL_SIZE, CELL_SIZE, RED);
 
-		if (isCorrect)
+		if (puzzles[currentPuzzleIndex].isCorrect)
 		{
 			DrawRectangleLines(0, 0, GAME_WIDTH, GAME_HEIGHT, GREEN);
 		}
@@ -274,6 +325,7 @@ int main()
 
 		BeginDrawing();
 		ClearBackground(RAYWHITE);
+
 		Rectangle source = { 0.0f, 0.0f, (float)renderTexture.texture.width, (float)-renderTexture.texture.height };
 		Rectangle dest = { 0, 0, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT };
 
@@ -282,6 +334,8 @@ int main()
 		EndDrawing();
 	}
 
+	UnloadShader(shader);
+	UnloadTexture(noiseTexture);
 	UnloadTexture(atlasTexture);
 	UnloadRenderTexture(renderTexture);
 	CloseWindow();

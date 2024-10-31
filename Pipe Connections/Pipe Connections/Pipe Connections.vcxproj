@@ -130,6 +130,7 @@
     <ClCompile Include="Main.c" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="fire.fs" />
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
