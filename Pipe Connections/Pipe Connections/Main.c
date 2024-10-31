@@ -62,6 +62,7 @@ struct Puzzle
 	int puzzleGrid[ROWS][ROWS];
 	int answerGrid[ROWS][ROWS];
 	bool isCorrect;
+	bool isLost;
 };
 
 
@@ -76,11 +77,12 @@ int main()
 	InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Pipe Connections");
 
 	Texture2D atlasTexture = LoadTexture("..\\..\\atlas.png");
+	Texture2D bricksTexture = LoadTexture("..\\..\\bricks.png");
 
 	RenderTexture2D renderTexture = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
 	SetTextureFilter(renderTexture.texture, TEXTURE_FILTER_POINT);
 
-	SetTargetFPS(FPS);
+	Font mxFont = LoadFont("..\\..\\m6x11plus.ttf");
 
 	Shader shader = LoadShader(NULL, "fire.fs");
 	Texture2D noiseTexture = LoadTexture("..\\..\\noise.png");
@@ -159,34 +161,40 @@ int main()
 	}
 
 	float time = 0.0f;
-	float fireYoffset = 1.f;
+	float fireYoffset = 1.2f;
+	char str[5];
 
+	SetTargetFPS(FPS);
 	while (!WindowShouldClose())
 	{
 		float dt = GetFrameTime();
 		time += dt;
 
-		SetShaderValue(shader, GetShaderLocation(shader, "time"), &time, SHADER_UNIFORM_FLOAT);
-		SetShaderValue(shader, GetShaderLocation(shader, "yOffset"), (float[1]) { fireYoffset }, SHADER_UNIFORM_FLOAT);
-
-		if (!puzzles[currentPuzzleIndex].isCorrect)
+		if (!puzzles[currentPuzzleIndex].isCorrect && !puzzles[currentPuzzleIndex].isLost)
 		{
 
-			fireYoffset = Vector2MoveTowards((Vector2) { 0.f, fireYoffset }, (Vector2) { 0.f, -0.25f }, dt * 0.075f).y;
+			fireYoffset = Vector2MoveTowards((Vector2) { 0.f, fireYoffset }, (Vector2) { 0.f, -0.0f }, dt * 0.05f).y;
+			
+			SetShaderValue(shader, GetShaderLocation(shader, "time"), &time, SHADER_UNIFORM_FLOAT);
+			SetShaderValue(shader, GetShaderLocation(shader, "yOffset"), (float[1]) { fireYoffset }, SHADER_UNIFORM_FLOAT);
 
-			if (fireYoffset <= -0.25f)
+
+			if (fireYoffset <= 0.0f)
 			{
 				// TODO Lost
+				puzzles[currentPuzzleIndex].isLost = true;
 			}
 		}
 
 
-
+		// Set visited to -1
 		Vector2 visited[BOX_COUNT];
 		for (int i = 0; i < BOX_COUNT; i++)
 		{
 			visited[i] = (Vector2){ -1, -1 };
 		}
+
+		// Update mouse + player movement
 		Vector2 mousePosition = GetMousePosition();
 		Vector2 gridPosition = (Vector2){ floorf(mousePosition.x / (CELL_SIZE * SCALE_FACTOR)),
 				floorf(mousePosition.y / (CELL_SIZE * SCALE_FACTOR)) };
@@ -197,7 +205,7 @@ int main()
 		player.pos.x = gridPosition.x * CELL_SIZE;
 		player.pos.y = gridPosition.y * CELL_SIZE;
 
-		// update box
+		// Update box
 		for (int i = 0; i < ROWS; i++)
 		{
 			for (int j = 0; j < ROWS; j++)
@@ -220,7 +228,7 @@ int main()
 			}
 		}
 
-		// set all water connection to false
+		// Set all water connection to false
 		for (int i = 0; i < BOX_COUNT; i++)
 		{
 			if (!boxes[i].isMain)
@@ -229,7 +237,7 @@ int main()
 			}
 		}
 
-		// check if pipe is connect to main, if so set isWaterConnected to true
+		// Update water present in the pipes
 		for (int i = 0; i < ROWS; i++)
 		{
 			for (int j = 0; j < ROWS; j++)
@@ -243,7 +251,7 @@ int main()
 			}
 		}
 
-		// check for solution
+		// Validate answer
 		puzzles[currentPuzzleIndex].isCorrect = true;
 		for (int i = 0; i < BOX_COUNT; i++)
 		{
@@ -256,14 +264,16 @@ int main()
 		BeginTextureMode(renderTexture);
 		ClearBackground(RAYWHITE);
 
+		// Draw brickS
+		DrawTexture(bricksTexture, 0, 0, WHITE);
+
 		// Draw fire
 		BeginShaderMode(shader);
-		DrawTexture(noiseTexture, 0, 0, WHITE); // Apply shader to the texture
+		DrawTexture(noiseTexture, 0, 0, WHITE);
 		EndShaderMode();
-		//DrawTexturePro(atlasTexture, fireSource, fireDest, (Vector2) { 0.f, 0.f }, 0.f, (Color) { 255, 255, 255, 200 });
 
 		// Draw rectangle backgrounds
-		for (int x = SPACING; x < TOTAL_COUNT - SPACING; x++)
+		/*for (int x = SPACING; x < TOTAL_COUNT - SPACING; x++)
 		{
 			for (int y = SPACING; y < TOTAL_COUNT - SPACING; y++)
 			{
@@ -290,11 +300,15 @@ int main()
 					}
 				}
 			}
-		}
+		}*/
 
-		DrawRectangleLines(START, START, END, END, BLACK);
+		// Draw border
+		//DrawRectangleLines(START, START, END, END, BLACK);
 
-		// draw sprites
+		// Draw BG
+		//DrawRectangle(START, START, END, END, GetColor(0x4d2b32ff));
+
+		// Draw sprites
 		for (int i = 0; i < ROWS; i++)
 		{
 			for (int j = 0; j < ROWS; j++)
@@ -313,12 +327,8 @@ int main()
 			}
 		}
 
+		// Draw player
 		DrawRectangleLines(player.pos.x, player.pos.y, CELL_SIZE, CELL_SIZE, RED);
-
-		if (puzzles[currentPuzzleIndex].isCorrect)
-		{
-			DrawRectangleLines(0, 0, GAME_WIDTH, GAME_HEIGHT, GREEN);
-		}
 
 		EndTextureMode();
 
@@ -330,6 +340,23 @@ int main()
 		Rectangle dest = { 0, 0, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT };
 
 		DrawTexturePro(renderTexture.texture, source, dest, (Vector2) { 0, 0 }, 0.f, WHITE);
+
+		// Draw player won
+		if (puzzles[currentPuzzleIndex].isCorrect)
+		{
+			DrawRectangleLines(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, GREEN);
+			DrawTextEx(mxFont, "Fire was put out!", (Vector2) { WINDOW_WIDTH / 2.f - 210.f, WINDOW_HEIGHT / 8.f }, 72.f, 1.f, BLACK);
+		}
+
+		if (puzzles[currentPuzzleIndex].isLost)
+		{
+			DrawTextEx(mxFont, "BURNED!!!", (Vector2) { WINDOW_WIDTH / 2.f - 170.f, WINDOW_HEIGHT / 8.f }, 72.f, 1.f, RED);
+		}
+	
+		
+		sprintf_s(str, sizeof(str), "%1.1f", fireYoffset);
+
+		DrawText(str, 0, 0, 32.f, BLACK);
 
 		EndDrawing();
 	}
