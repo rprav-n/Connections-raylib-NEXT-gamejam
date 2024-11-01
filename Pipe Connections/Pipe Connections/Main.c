@@ -15,9 +15,9 @@
 #define ROWS 4
 #define COLS 4
 #define BOX_COUNT 16
-#define START (CELL_SIZE * SPACING)
-#define END (BOX_COUNT * ROWS)
-#define TOTAL_PUZZLES 1
+#define START_POS (CELL_SIZE * SPACING)
+#define END_POS (BOX_COUNT * ROWS)
+#define TOTAL_PUZZLES 2
 #define FIRE_MOVE_SPEED 8.f
 
 enum Direction
@@ -26,6 +26,15 @@ enum Direction
 	LEFT,
 	RIGHT,
 	BOTTOM
+};
+
+enum State
+{
+	START,
+	PLAYING,
+	END,
+	WON,
+	LOST,
 };
 
 struct Player
@@ -61,12 +70,12 @@ struct Box
 struct Puzzle
 {
 	int puzzleGrid[ROWS][ROWS];
-	int answerGrid[ROWS][ROWS];
 	bool isCorrect;
 	bool isLost;
 };
 
-
+void InitBoxes(struct Box boxes[BOX_COUNT], struct Puzzle puzzle);
+void DrawBoxes(struct Box boxes[BOX_COUNT], Texture2D atlasTexture);
 void RotateBox(struct Box* box);
 int GetBoxIndexByPos(struct Box boxes[BOX_COUNT], Vector2 pos);
 void CheckForAdjacentBox(struct Box boxes[BOX_COUNT], struct Box* box, Vector2 pos, Vector2 visted[BOX_COUNT]);
@@ -86,6 +95,7 @@ int main()
 	SetTextureFilter(renderTexture.texture, TEXTURE_FILTER_POINT);
 
 	Font mxFont = LoadFont("..\\..\\m6x11plus.ttf");
+	Font mx16Font = LoadFont("..\\..\\m6x11.ttf");
 
 	Sound wrenchSnd = LoadSound("..\\..\\wrench.mp3");
 	SetSoundVolume(wrenchSnd, 4.f);
@@ -121,12 +131,13 @@ int main()
 	};
 
 	struct Player player = {
-		.pos = (Vector2){ (float)START, (float)START }
+		.pos = (Vector2){ (float)START_POS, (float)START_POS }
 	};
 	
 	struct Puzzle puzzles[TOTAL_PUZZLES];
 
 	int currentPuzzleIndex = 0;
+	bool isNextBtnPressed = false;
 	puzzles[0] = (struct Puzzle){
 		.puzzleGrid = {
 			{3, 1, 2, 1},
@@ -134,22 +145,337 @@ int main()
 			{12, 8, 10, 7},
 			{3, 12, 4, 11},
 		},
-		.answerGrid = {
-			{0, 3, 0, 1},
-			{3, 1, 2, 1},
-			{2, 3, 3, 3},
-			{3, 3, 0, 3}
+		.isCorrect = false,
+	};
+	puzzles[1] = (struct Puzzle){
+		.puzzleGrid = {
+			{13, 14, 2, 3},
+			{2, 11, 7, 5},
+			{3, 12, 8, 9},
+			{2, 9, 14, 3}
 		},
 		.isCorrect = false,
 	};
 
 	struct Box boxes[BOX_COUNT];
 
+	InitBoxes(boxes, puzzles[currentPuzzleIndex]);
+
+	float time = 0.0f;
+	float fireYoffset = 1.f;
+	char timeStr[20];
+	char levelStr[20];
+
+	bool isCRTOn = false;
+
+	SetTargetFPS(FPS);
+
+	bool isGameEnd = false;
+
+	enum State gameState = START;
+
+	while (!WindowShouldClose())
+	{
+		// Common state
+		float dt = GetFrameTime();
+		if (IsKeyPressed(KEY_C))
+		{
+			isCRTOn = !isCRTOn;
+		}
+
+		// Update Code
+		switch (gameState)
+		{
+		case START:
+			if (IsKeyPressed(KEY_P))
+			{
+				gameState = PLAYING;
+			}
+			break;
+		case PLAYING:
+			time += dt;
+			SetShaderValue(crtShader, GetShaderLocation(crtShader, "texture0"), &renderTexture, SHADER_UNIFORM_FLOAT);
+			SetShaderValue(crtShader, GetShaderLocation(crtShader, "scanline_count"), (float[1]) { 0.f }, SHADER_UNIFORM_FLOAT);
+			
+			if (!puzzles[currentPuzzleIndex].isCorrect && !puzzles[currentPuzzleIndex].isLost)
+			{
+				UpdateMusicStream(fireMusic);
+
+				fireYoffset = Vector2MoveTowards((Vector2) { 0.f, fireYoffset }, (Vector2) { 0.f, -0.0f }, dt * 0.025f).y;
+
+				SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
+				SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { fireYoffset }, SHADER_UNIFORM_FLOAT);
+
+				if (fireYoffset <= 0.0f)
+				{
+					gameState = LOST;
+				}
+			}
+
+			// Set visited to -1
+			Vector2 visited[BOX_COUNT];
+			for (int i = 0; i < BOX_COUNT; i++)
+			{
+				visited[i] = (Vector2){ -1, -1 };
+			}
+
+			// Update mouse + player movement
+			Vector2 mousePosition = GetMousePosition();
+			Vector2 gridPosition = (Vector2){ floorf(mousePosition.x / (CELL_SIZE * SCALE_FACTOR)),
+					floorf(mousePosition.y / (CELL_SIZE * SCALE_FACTOR)) };
+
+			gridPosition.x = Clamp(gridPosition.x, SPACING, TOTAL_COUNT - SPACING - 1);
+			gridPosition.y = Clamp(gridPosition.y, SPACING, TOTAL_COUNT - SPACING - 1);
+
+			player.pos.x = gridPosition.x * CELL_SIZE;
+			player.pos.y = gridPosition.y * CELL_SIZE;
+
+			// Update box
+			for (int i = 0; i < ROWS; i++)
+			{
+				for (int j = 0; j < ROWS; j++)
+				{
+					int index = GetBoxIndexByPos(boxes, (Vector2) { i, j });
+
+					boxes[index].dest = (Rectangle){
+						((i + SPACING) * CELL_SIZE) + (CELL_SIZE / 2.f), ((j + SPACING) * CELL_SIZE) + (CELL_SIZE / 2.f),
+						CELL_SIZE,
+						CELL_SIZE
+					};
+
+					boxes[index].origin = (Vector2){ boxes[index].dest.width / 2.f, boxes[index].dest.height / 2.f };
+
+					if (boxes[index].x == gridPosition.x - 2 && boxes[index].y == gridPosition.y - 2 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)
+						&& !puzzles[currentPuzzleIndex].isCorrect && !puzzles[currentPuzzleIndex].isLost)
+					{
+						RotateBox(&boxes[index]);
+						PlaySound(wrenchSnd);
+					}
+				}
+			}
+
+			// Set all water connection to false
+			for (int i = 0; i < BOX_COUNT; i++)
+			{
+				if (!boxes[i].isMain)
+				{
+					boxes[i].isWaterConnected = false;
+				}
+			}
+
+			// Update water present in the pipes
+			for (int i = 0; i < ROWS; i++)
+			{
+				for (int j = 0; j < ROWS; j++)
+				{
+					int index = GetBoxIndexByPos(boxes, (Vector2) { i, j });
+					if (boxes[index].isMain)
+					{
+						CheckForAdjacentBox(boxes, &boxes[index], (Vector2) { i, j }, visited);
+						break;
+					}
+				}
+			}
+
+			// Validate answer
+			puzzles[currentPuzzleIndex].isCorrect = true;
+			for (int i = 0; i < BOX_COUNT; i++)
+			{
+				if (!boxes[i].isWaterConnected)
+				{
+					puzzles[currentPuzzleIndex].isCorrect = false;
+				}
+			}
+
+			if (puzzles[currentPuzzleIndex].isCorrect)
+			{
+				currentPuzzleIndex += 1;
+				if (currentPuzzleIndex < TOTAL_PUZZLES)
+				{
+					gameState = WON;
+				}
+				else
+				{
+					gameState = END;
+				}
+			}
+
+			sprintf_s(levelStr, sizeof(levelStr), "Level: %d", currentPuzzleIndex + 1);
+			sprintf_s(timeStr, sizeof(timeStr), "Time: %1.4f", fireYoffset);
+
+			break;
+		case END:
+			break;
+		case WON:
+			if (IsKeyPressed(KEY_N))
+			{
+				InitBoxes(boxes, puzzles[currentPuzzleIndex]);
+				fireYoffset = 1.f;
+				gameState = PLAYING;
+			}
+			break;
+		case LOST:
+			UpdateMusicStream(fireMusic);
+			time += dt;
+			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
+			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { 0.5f }, SHADER_UNIFORM_FLOAT);
+			if (IsKeyPressed(KEY_R))
+			{
+				InitBoxes(boxes, puzzles[currentPuzzleIndex]);
+				fireYoffset = 1.f;
+				gameState = PLAYING;
+			}
+			break;
+		default:
+			break;
+		}
+
+		BeginTextureMode(renderTexture);
+		ClearBackground(RAYWHITE);
+
+		// Draw brickS
+		DrawTexture(bricksTexture, 0, 0, WHITE);
+
+		switch (gameState)
+		{
+		case START:
+			if (isCRTOn)
+			{
+				DrawTextEx(mx16Font, "Pipe Connections", (Vector2) { 22, 20 }, 10.f, 1.f, WHITE);
+				DrawTextEx(mx16Font, "Press 'P' to play", (Vector2) { 25, 40 }, 8.f, 1.f, WHITE);
+			}
+			
+			break;
+		case PLAYING:
+			// Draw fire
+			BeginShaderMode(fireShader);
+			DrawTexture(noiseTexture, 0, 0, WHITE);
+			EndShaderMode();
+
+			// Draw boxes
+			DrawBoxes(boxes, atlasTexture);
+
+			// Draw player
+			DrawRectangleLines(player.pos.x, player.pos.y, CELL_SIZE, CELL_SIZE, WHITE);
+
+			if (isCRTOn)
+			{
+				DrawText(levelStr, 10, 10, 10, WHITE);
+				DrawText(timeStr, 10, 20, 10, WHITE);
+			}
+			
+			break;
+		case END:
+			DrawBoxes(boxes, atlasTexture);
+			if (isCRTOn)
+			{
+				DrawTextEx(mx16Font, "Thanks for Playing", (Vector2) { 15, 20 }, 10.f, 1.f, WHITE);
+			}
+			
+			break;
+		case WON:
+			DrawBoxes(boxes, atlasTexture);
+			if (isCRTOn)
+			{
+				DrawTextEx(mx16Font, "Doused", (Vector2) { 35, 12 }, 16.f, 1.f, WHITE);
+				DrawText("Press 'N' to next level", 8, 24, 8, WHITE);
+			}
+			break;
+		case LOST:
+			BeginShaderMode(fireShader);
+			DrawTexture(noiseTexture, 0, 0, WHITE);
+			EndShaderMode();
+			if (isCRTOn)
+			{
+				DrawTextEx(mx16Font, "BURNNN'D!", (Vector2) { 35, 12 }, 16.f, 1.f, WHITE);
+				DrawText("Press 'R' to restart", 12, 24, 8, WHITE);
+			}
+			break;
+		default:
+			break;
+		}
+
+		EndTextureMode();
+
+		
+		BeginDrawing();
+		ClearBackground(RAYWHITE);
+		if (isCRTOn)
+		{
+			BeginShaderMode(crtShader);
+		}
+		
+		Rectangle source = { 0.0f, 0.0f, (float)renderTexture.texture.width, (float)-renderTexture.texture.height };
+		Rectangle dest = { 0, 0, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT };
+
+		DrawTexturePro(renderTexture.texture, source, dest, (Vector2) { 0, 0 }, 0.f, WHITE);
+
+		switch (gameState)
+		{
+		case START:
+			if (!isCRTOn)
+			{
+				DrawTextEx(mxFont, "Pipe Connections", (Vector2) { 180, 100 }, 72.f, 1.f, WHITE);
+				DrawTextEx(mx16Font, "Press 'P' to play", (Vector2) { 250, 200 }, 32.f, 1.f, WHITE);
+			}
+			break;
+		case PLAYING:
+			if (!isCRTOn)
+			{
+				DrawTextEx(mx16Font, levelStr, (Vector2) { 10, 10 }, 32.f, 1.f, WHITE);
+				DrawTextEx(mx16Font, timeStr, (Vector2) { 10, 50 }, 32.f, 1.f, WHITE);
+			}
+			break;
+		case END:
+			if (!isCRTOn)
+			{
+				DrawTextEx(mxFont, "Thanks for Playing", (Vector2) { 150, 100 }, 72.f, 1.f, WHITE);
+			}
+			break;
+		case WON:
+			if (!isCRTOn)
+			{
+				DrawTextEx(mxFont, "Doused", (Vector2) { 290, 50}, 72.f, 1.f, WHITE);
+				DrawTextEx(mx16Font, "Press 'N' to next level", (Vector2) { 220, 150.f }, 32.f, 1.f, WHITE);
+			}
+			break;
+		case LOST:
+			if (!isCRTOn)
+			{
+				DrawTextEx(mxFont, "BURNNN'D!", (Vector2) { 290, 50}, 72.f, 1.f, WHITE);
+				DrawTextEx(mx16Font, "Press 'R' to restart", (Vector2) { 230, 150.f}, 32.f, 1.f, WHITE);
+			}
+			break;
+		default:
+			break;
+		}
+
+		
+		if (isCRTOn)
+		{
+			EndShaderMode();
+		}
+		EndDrawing();
+	}
+
+	UnloadShader(fireShader);
+	UnloadTexture(noiseTexture);
+	UnloadTexture(atlasTexture);
+	UnloadMusicStream(fireMusic);
+	UnloadRenderTexture(renderTexture);
+	CloseAudioDevice();
+	CloseWindow();
+
+	return 0;
+}
+
+void InitBoxes(struct Box boxes[BOX_COUNT], struct Puzzle puzzle)
+{
 	for (int i = 0; i < ROWS; i++)
 	{
 		for (int j = 0; j < ROWS; j++)
 		{
-			int id = puzzles[currentPuzzleIndex].puzzleGrid[i][j];
+			int id = puzzle.puzzleGrid[i][j];
 			int index = (i * ROWS) + j;
 
 			struct Box box = {
@@ -175,221 +501,28 @@ int main()
 			boxes[index] = box;
 		}
 	}
+}
 
-	float time = 0.0f;
-	float fireYoffset = 1.2f;
-	char str[5];
 
-	bool isCRTOn = false;
-
-	SetTargetFPS(FPS);
-	while (!WindowShouldClose())
+void DrawBoxes(struct Box boxes[BOX_COUNT], Texture2D atlasTexture)
+{
+	for (int i = 0; i < ROWS; i++)
 	{
-
-		if (IsKeyPressed(KEY_C))
+		for (int j = 0; j < ROWS; j++)
 		{
-			isCRTOn = !isCRTOn;
-		}
+			int index = (i * ROWS) + j;
 
-		float dt = GetFrameTime();
-		time += dt;
-
-		SetShaderValue(crtShader, GetShaderLocation(crtShader, "texture0"), &renderTexture, SHADER_UNIFORM_FLOAT);
-		SetShaderValue(crtShader, GetShaderLocation(crtShader, "scanline_count"), (float[1]){ 0.f }, SHADER_UNIFORM_FLOAT);
-
-		if (!puzzles[currentPuzzleIndex].isCorrect && !puzzles[currentPuzzleIndex].isLost)
-		{
-			UpdateMusicStream(fireMusic);
-
-			fireYoffset = Vector2MoveTowards((Vector2) { 0.f, fireYoffset }, (Vector2) { 0.f, -0.0f }, dt * 0.05f).y;
-			
-			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
-			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { fireYoffset }, SHADER_UNIFORM_FLOAT);
-
-
-			if (fireYoffset <= 0.0f)
+			if (boxes[index].isMain || boxes[index].isWaterConnected)
 			{
-				// TODO Lost
-				puzzles[currentPuzzleIndex].isLost = true;
+				boxes[index].source.y = 16.f;
 			}
-		}
-
-
-		// Set visited to -1
-		Vector2 visited[BOX_COUNT];
-		for (int i = 0; i < BOX_COUNT; i++)
-		{
-			visited[i] = (Vector2){ -1, -1 };
-		}
-
-		// Update mouse + player movement
-		Vector2 mousePosition = GetMousePosition();
-		Vector2 gridPosition = (Vector2){ floorf(mousePosition.x / (CELL_SIZE * SCALE_FACTOR)),
-				floorf(mousePosition.y / (CELL_SIZE * SCALE_FACTOR)) };
-
-		gridPosition.x = Clamp(gridPosition.x, SPACING, TOTAL_COUNT - SPACING - 1);
-		gridPosition.y = Clamp(gridPosition.y, SPACING, TOTAL_COUNT - SPACING - 1);
-
-		player.pos.x = gridPosition.x * CELL_SIZE;
-		player.pos.y = gridPosition.y * CELL_SIZE;
-
-		// Update box
-		for (int i = 0; i < ROWS; i++)
-		{
-			for (int j = 0; j < ROWS; j++)
+			else
 			{
-				int index = GetBoxIndexByPos(boxes, (Vector2) { i, j });
-
-				boxes[index].dest = (Rectangle){
-					((i + SPACING) * CELL_SIZE) + (CELL_SIZE / 2.f), ((j + SPACING) * CELL_SIZE) + (CELL_SIZE / 2.f),
-					CELL_SIZE,
-					CELL_SIZE
-				};
-
-				boxes[index].origin = (Vector2){ boxes[index].dest.width / 2.f, boxes[index].dest.height / 2.f };
-
-				if (boxes[index].x == gridPosition.x - 2 && boxes[index].y == gridPosition.y - 2 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) 
-					&& !puzzles[currentPuzzleIndex].isCorrect)
-				{
-					RotateBox(&boxes[index]);
-					PlaySound(wrenchSnd);
-				}
+				boxes[index].source.y = 0.f;
 			}
+			DrawTexturePro(atlasTexture, boxes[index].source, boxes[index].dest, boxes[index].origin, boxes[index].rotation, WHITE);
 		}
-
-		// Set all water connection to false
-		for (int i = 0; i < BOX_COUNT; i++)
-		{
-			if (!boxes[i].isMain)
-			{
-				boxes[i].isWaterConnected = false;
-			}
-		}
-
-		// Update water present in the pipes
-		for (int i = 0; i < ROWS; i++)
-		{
-			for (int j = 0; j < ROWS; j++)
-			{
-				int index = GetBoxIndexByPos(boxes, (Vector2) { i, j });
-				if (boxes[index].isMain)
-				{
-					CheckForAdjacentBox(boxes, &boxes[index], (Vector2) { i, j }, visited);
-					break;
-				}
-			}
-		}
-
-		// Validate answer
-		puzzles[currentPuzzleIndex].isCorrect = true;
-		for (int i = 0; i < BOX_COUNT; i++)
-		{
-			if (!boxes[i].isWaterConnected)
-			{
-				puzzles[currentPuzzleIndex].isCorrect = false;
-			}
-		}
-
-		BeginTextureMode(renderTexture);
-		ClearBackground(RAYWHITE);
-
-		// Draw brickS
-		DrawTexture(bricksTexture, 0, 0, WHITE);
-
-		// Draw fire
-		BeginShaderMode(fireShader);
-		DrawTexture(noiseTexture, 0, 0, WHITE);
-		EndShaderMode();
-
-		// Draw sprites
-		for (int i = 0; i < ROWS; i++)
-		{
-			for (int j = 0; j < ROWS; j++)
-			{
-				int index = (i * ROWS) + j;
-
-				if (boxes[index].isMain || boxes[index].isWaterConnected)
-				{
-					boxes[index].source.y = 16.f;
-				}
-				else
-				{
-					boxes[index].source.y = 0.f;
-				}
-				DrawTexturePro(atlasTexture, boxes[index].source, boxes[index].dest, boxes[index].origin, boxes[index].rotation, WHITE);
-			}
-		}
-
-		// Draw player
-		DrawRectangleLines(player.pos.x, player.pos.y, CELL_SIZE, CELL_SIZE, WHITE);
-
-		if (isCRTOn)
-		{
-			// Draw player won
-			if (puzzles[currentPuzzleIndex].isCorrect)
-			{
-				//DrawRectangle(0, 80, WINDOW_WIDTH, 100, BLACK);
-				DrawTextEx(mxFont, "Doused!", (Vector2) { 40, 12 }, 18.f, 1.f, WHITE);
-			}
-
-			// Draw player lost
-			if (puzzles[currentPuzzleIndex].isLost)
-			{
-				DrawTextEx(mxFont, "BURNNN'D!", (Vector2) { 35, 12 }, 18.f, 1.f, WHITE);
-			}
-		}
-		
-
-		EndTextureMode();
-
-		
-		BeginDrawing();
-		ClearBackground(RAYWHITE);
-		if (isCRTOn)
-		{
-			BeginShaderMode(crtShader);
-		}
-		
-		Rectangle source = { 0.0f, 0.0f, (float)renderTexture.texture.width, (float)-renderTexture.texture.height };
-		Rectangle dest = { 0, 0, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT };
-
-		DrawTexturePro(renderTexture.texture, source, dest, (Vector2) { 0, 0 }, 0.f, WHITE);
-
-		if (!isCRTOn)
-		{
-			// Draw player won
-			if (puzzles[currentPuzzleIndex].isCorrect)
-			{
-				//DrawRectangle(0, 80, WINDOW_WIDTH, 100, BLACK);
-				DrawTextEx(mxFont, "Doused!", (Vector2) { 300, 80 }, 72.f, 1.f, WHITE);
-			}
-
-			// Draw player lost
-			if (puzzles[currentPuzzleIndex].isLost)
-			{
-				DrawTextEx(mxFont, "BURNNN'D!", (Vector2) { 270, 80 }, 72.f, 1.f, redColor);
-			}
-		}
-		
-		
-		sprintf_s(str, sizeof(str), "%1.1f", fireYoffset);
-
-		if (isCRTOn)
-		{
-			EndShaderMode();
-		}
-		EndDrawing();
 	}
-
-	UnloadShader(fireShader);
-	UnloadTexture(noiseTexture);
-	UnloadTexture(atlasTexture);
-	UnloadMusicStream(fireMusic);
-	UnloadRenderTexture(renderTexture);
-	CloseAudioDevice();
-	CloseWindow();
-
-	return 0;
 }
 
 
