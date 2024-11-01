@@ -80,13 +80,18 @@ int main()
 
 	Texture2D atlasTexture = LoadTexture("..\\..\\atlas.png");
 	Texture2D bricksTexture = LoadTexture("..\\..\\bricks.png");
+	Texture2D waterDropTexture = LoadTexture("..\\..\\water_drop.png");
 
 	RenderTexture2D renderTexture = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
 	SetTextureFilter(renderTexture.texture, TEXTURE_FILTER_POINT);
 
 	Font mxFont = LoadFont("..\\..\\m6x11plus.ttf");
 
+	Sound wrenchSnd = LoadSound("..\\..\\wrench.mp3");
+	SetSoundVolume(wrenchSnd, 4.f);
+
 	Music fireMusic = LoadMusicStream("..\\..\\flame.mp3");
+	SetMusicVolume(fireMusic, 0.4f);
 	PlayMusicStream(fireMusic);
 
 	Shader fireShader = LoadShader(NULL, "fire.fs");
@@ -96,6 +101,7 @@ int main()
 	// { 1.0f, 0.25f, 0.25f } valve red color = #ff4242
 	// { 1.0f, 0.5f, 0.0f } = orange colr = #ff8000
 	float orangeColor[3] = { 1.0f, 0.5f, 0.0f };
+	Color redColor = GetColor(0xff4242ff);
 
 	SetShaderValue(fireShader, GetShaderLocation(fireShader, "flameColor"), orangeColor, SHADER_UNIFORM_VEC3);
 	SetShaderValue(fireShader, GetShaderLocation(fireShader, "animationSpeed"), (float[1]) { 0.5f }, SHADER_UNIFORM_FLOAT);
@@ -173,11 +179,17 @@ int main()
 	float time = 0.0f;
 	float fireYoffset = 1.2f;
 	char str[5];
-	
+
+	bool isCRTOn = false;
 
 	SetTargetFPS(FPS);
 	while (!WindowShouldClose())
 	{
+
+		if (IsKeyPressed(KEY_C))
+		{
+			isCRTOn = !isCRTOn;
+		}
 
 		float dt = GetFrameTime();
 		time += dt;
@@ -240,6 +252,7 @@ int main()
 					&& !puzzles[currentPuzzleIndex].isCorrect)
 				{
 					RotateBox(&boxes[index]);
+					PlaySound(wrenchSnd);
 				}
 			}
 		}
@@ -310,34 +323,61 @@ int main()
 		// Draw player
 		DrawRectangleLines(player.pos.x, player.pos.y, CELL_SIZE, CELL_SIZE, WHITE);
 
+		if (isCRTOn)
+		{
+			// Draw player won
+			if (puzzles[currentPuzzleIndex].isCorrect)
+			{
+				//DrawRectangle(0, 80, WINDOW_WIDTH, 100, BLACK);
+				DrawTextEx(mxFont, "Doused!", (Vector2) { 40, 12 }, 18.f, 1.f, WHITE);
+			}
+
+			// Draw player lost
+			if (puzzles[currentPuzzleIndex].isLost)
+			{
+				DrawTextEx(mxFont, "BURNNN'D!", (Vector2) { 35, 12 }, 18.f, 1.f, WHITE);
+			}
+		}
+		
+
 		EndTextureMode();
 
 		
 		BeginDrawing();
 		ClearBackground(RAYWHITE);
-		//BeginShaderMode(crtShader);
+		if (isCRTOn)
+		{
+			BeginShaderMode(crtShader);
+		}
+		
 		Rectangle source = { 0.0f, 0.0f, (float)renderTexture.texture.width, (float)-renderTexture.texture.height };
 		Rectangle dest = { 0, 0, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT };
 
 		DrawTexturePro(renderTexture.texture, source, dest, (Vector2) { 0, 0 }, 0.f, WHITE);
 
-		// Draw player won
-		if (puzzles[currentPuzzleIndex].isCorrect)
+		if (!isCRTOn)
 		{
-			//DrawRectangleLines(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, GREEN);
-			DrawRectangle(0, 80, WINDOW_WIDTH, 100, BLACK);
-			DrawTextEx(mxFont, "Fire's put out!", (Vector2) { WINDOW_WIDTH / 2.f - 180.f, 90 }, 72.f, 1.f, WHITE);
+			// Draw player won
+			if (puzzles[currentPuzzleIndex].isCorrect)
+			{
+				//DrawRectangle(0, 80, WINDOW_WIDTH, 100, BLACK);
+				DrawTextEx(mxFont, "Doused!", (Vector2) { 300, 80 }, 72.f, 1.f, WHITE);
+			}
+
+			// Draw player lost
+			if (puzzles[currentPuzzleIndex].isLost)
+			{
+				DrawTextEx(mxFont, "BURNNN'D!", (Vector2) { 270, 80 }, 72.f, 1.f, redColor);
+			}
 		}
 		
-		if (puzzles[currentPuzzleIndex].isLost)
-		{
-			DrawTextEx(mxFont, "You let fire burn the place!", (Vector2) { 50.f, WINDOW_HEIGHT / 8.f }, 72.f, 1.f, RED);
-		}
-
 		
 		sprintf_s(str, sizeof(str), "%1.1f", fireYoffset);
 
-		//EndShaderMode();
+		if (isCRTOn)
+		{
+			EndShaderMode();
+		}
 		EndDrawing();
 	}
 
