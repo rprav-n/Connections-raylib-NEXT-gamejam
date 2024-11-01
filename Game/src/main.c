@@ -2,9 +2,6 @@
 #include "raylib.h"
 #include "raymath.h"
 
-#define RAYGUI_IMPLEMENTATION
-#include "raygui.h"
-
 #include <stdio.h>
 
 #define GAME_WIDTH 128.f
@@ -22,9 +19,18 @@
 #define START_POS (CELL_SIZE * SPACING)
 #define END_POS (BOX_COUNT * ROWS)
 #define TOTAL_PUZZLES 2
-#define FIRE_MOVE_SPEED 0.015f
+#define FIRE_MOVE_SPEED 0.05f
 #define BUTTON_WIDTH 64
 #define BUTTON_HEIGHT 32
+
+/* 
+	int blackColor = 0x000000ff;
+	int whiteColor = 0xffffffff;
+	int blueColor = 0x29adffff;
+	int redColor = 0xff4242ff;
+	int greenColor = 0x45e082ff;
+	int orangeColor = 0xff8000ff; // color used for flames
+*/
 
 enum Direction
 {
@@ -80,13 +86,25 @@ struct Puzzle
 	bool isLost;
 };
 
+struct Text 
+{
+	char text[50];
+	float fontSize;
+	float spacing;
+	Vector2 pos;
+	Vector2 origin;
+	Vector2 size;
+};
+
 
 void InitBoxes(struct Box boxes[BOX_COUNT], struct Puzzle puzzle);
 void DrawBoxes(struct Box boxes[BOX_COUNT], Texture2D atlasTexture);
 void RotateBox(struct Box* box);
 int GetBoxIndexByPos(struct Box boxes[BOX_COUNT], Vector2 pos);
 void CheckForAdjacentBox(struct Box boxes[BOX_COUNT], struct Box* box, Vector2 pos, Vector2 visted[BOX_COUNT]);
-
+Vector2 GetFontOrigin(struct Text textData);
+Vector2 GetFontSize(Font font, struct Text textData);
+void DrawCustomText(Font font, struct Text textData);
 
 int main()
 {
@@ -94,18 +112,18 @@ int main()
 	InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Pipe Connections");
 	InitAudioDevice();
 
-	Texture2D atlasTexture = LoadTexture("assets/atlas.png");
-	Texture2D bricksTexture = LoadTexture("assets/bricks.png");
-
 	RenderTexture2D renderTexture = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
 	SetTextureFilter(renderTexture.texture, TEXTURE_FILTER_POINT);
 
-	Font mxFont = LoadFont("assets/m6x11plus.ttf");
+	Texture2D atlasTexture = LoadTexture("assets/atlas.png");
+	Texture2D bricksTexture = LoadTexture("assets/bricks.png");
+	Texture2D noiseTexture = LoadTexture("assets/noise.png");
+
+
 	Font mx16Font = LoadFont("assets/m6x11.ttf");
 
 	Sound wrenchSnd = LoadSound("assets/wrench.wav");
 	SetSoundVolume(wrenchSnd, 2.f);
-
 
 	Music fireMusic = LoadMusicStream("assets/flame.mp3");
 	SetMusicVolume(fireMusic, 0.2f);
@@ -115,17 +133,15 @@ int main()
 	SetMusicVolume(bgMusic, 0.4f);
 	PlayMusicStream(bgMusic);
 
-	Shader fireShader = LoadShader(NULL, "shaders/fire.fs");
-	Shader crtShader = LoadShader(NULL, "shaders/crt.fs");
-	Texture2D noiseTexture = LoadTexture("assets/noise.png");
+	Shader fireShader = LoadShader(NULL, "assets/shaders/fire.fs");
 
 	// { 1.0f, 0.25f, 0.25f } valve red color = #ff4242
 	// { 1.0f, 0.5f, 0.0f } = orange colr = #ff8000
-	float orangeColor[3] = { 1.0f, 0.5f, 0.0f };
+	float orangeColorFloat[3] = { 1.0f, 0.5f, 0.0f };
 
-	SetShaderValue(fireShader, GetShaderLocation(fireShader, "flameColor"), orangeColor, SHADER_UNIFORM_VEC3);
+	SetShaderValue(fireShader, GetShaderLocation(fireShader, "flameColor"), orangeColorFloat, SHADER_UNIFORM_VEC3);
 	SetShaderValue(fireShader, GetShaderLocation(fireShader, "animationSpeed"), (float[1]) { 0.5f }, SHADER_UNIFORM_FLOAT);
-
+	SetShaderValueTexture(fireShader, GetShaderLocation(fireShader, "texture0"), noiseTexture);
 
 	struct Player player = {
 		.pos = (Vector2){ (float)START_POS, (float)START_POS }
@@ -134,7 +150,6 @@ int main()
 	struct Puzzle puzzles[TOTAL_PUZZLES];
 
 	int currentPuzzleIndex = 0;
-	
 	puzzles[0] = (struct Puzzle){
 		.puzzleGrid = {
 			{3, 1, 2, 1},
@@ -161,11 +176,98 @@ int main()
 	float time = 0.0f;
 	float fireYoffset = 1.f;
 	float wrenchRotation = 0.f;
-	char timeStr[20];
-	char levelStr[20];
 
 
-	bool isCRTOn = false;
+	// Set all texts
+	struct Text titleText = 
+	{
+		.text = "Pipe Connections",
+		.fontSize = 64.f,
+		.spacing = 2.f
+	};
+	titleText.size = GetFontSize(mx16Font, titleText);
+	titleText.origin = GetFontOrigin(titleText);
+	titleText.pos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT/3.f};
+
+	struct Text playText = 
+	{
+		.text = "Press 'P' to play",
+		.fontSize = 32.f,
+		.spacing = 1.f
+	};
+	playText.size = GetFontSize(mx16Font, playText);
+	playText.origin = GetFontOrigin(playText);
+	playText.pos = (Vector2){WINDOW_WIDTH/2.f, titleText.pos.y + titleText.size.y + 10.f};
+
+	struct Text levelText = 
+	{
+		.text = "Level: 1",
+		.fontSize = 32.f,
+		.spacing = 1.f
+	};
+	levelText.size = GetFontSize(mx16Font, levelText);
+	levelText.origin = (Vector2){0.f, 0.f};
+	levelText.pos = (Vector2){10.f, 10.f};
+
+	struct Text timeText = 
+	{
+		.text = "Time: 1.0000",
+		.fontSize = 32.f,
+		.spacing = 1.f
+	};
+	timeText.size = GetFontSize(mx16Font, timeText);
+	timeText.origin = (Vector2){0.f, 0.f};
+	timeText.pos = (Vector2){10.f, levelText.pos.y + levelText.size.y + 10.f};
+
+	struct Text burnedText = 
+	{
+		.text = "BURNNNN'd",
+		.fontSize = 64.f,
+		.spacing = 2.f
+	};
+	burnedText.size = GetFontSize(mx16Font, burnedText);
+	burnedText.origin = GetFontOrigin(burnedText);
+	burnedText.pos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT/4.f};
+
+	struct Text restartText = 
+	{
+		.text = "Press 'R' to restart",
+		.fontSize = 32.f,
+		.spacing = 1.f
+	};
+	restartText.size = GetFontSize(mx16Font, restartText);
+	restartText.origin = GetFontOrigin(restartText);
+	restartText.pos = (Vector2){WINDOW_WIDTH/2.f, burnedText.pos.y + burnedText.size.y + 10.f};
+
+	struct Text wonText = 
+	{
+		.text = "Doused!",
+		.fontSize = 64.f,
+		.spacing = 2.f
+	};
+	wonText.size = GetFontSize(mx16Font, wonText);
+	wonText.origin = GetFontOrigin(wonText);
+	wonText.pos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT/8.f};
+
+	struct Text nextText = 
+	{
+		.text = "Press 'N' for next level",
+		.fontSize = 32.f,
+		.spacing = 1.f
+	};
+	nextText.size = GetFontSize(mx16Font, nextText);
+	nextText.origin = GetFontOrigin(nextText);
+	nextText.pos = (Vector2){WINDOW_WIDTH/2.f, wonText.pos.y + wonText.size.y + 10.f};
+
+	struct Text endText = 
+	{
+		.text = "Thank you for playing my game!",
+		.fontSize = 48.f,
+		.spacing = 2.f
+	};
+	endText.size = GetFontSize(mx16Font, endText);
+	endText.origin = GetFontOrigin(endText);
+	endText.pos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT/4.f};
 
 	enum State gameState = START;
 
@@ -177,10 +279,7 @@ int main()
 	{
 		// Common state
 		float dt = GetFrameTime();
-		if (IsKeyPressed(KEY_C))
-		{
-			isCRTOn = !isCRTOn;
-		}
+		time += dt;
 
 		UpdateMusicStream(bgMusic);
 
@@ -194,16 +293,12 @@ int main()
 			}
 			break;
 		case PLAYING:
-			time += dt;
-			SetShaderValue(crtShader, GetShaderLocation(crtShader, "texture0"), &renderTexture, SHADER_UNIFORM_FLOAT);
-			SetShaderValue(crtShader, GetShaderLocation(crtShader, "scanline_count"), (float[1]) { 0.f }, SHADER_UNIFORM_FLOAT);
 			
 			if (!puzzles[currentPuzzleIndex].isCorrect && !puzzles[currentPuzzleIndex].isLost)
 			{
 				UpdateMusicStream(fireMusic);
 
 				fireYoffset = Vector2MoveTowards((Vector2) { 0.f, fireYoffset }, (Vector2) { 0.f, -0.0f }, dt * FIRE_MOVE_SPEED).y;
-
 				SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
 				SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { fireYoffset }, SHADER_UNIFORM_FLOAT);
 
@@ -303,8 +398,10 @@ int main()
 				}
 			}
 
-			sprintf_s(levelStr, sizeof(levelStr), "Level: %d", currentPuzzleIndex + 1);
-			sprintf_s(timeStr, sizeof(timeStr), "Time: %1.4f", fireYoffset);
+			snprintf(levelText.text, sizeof levelText.text, "Level: %d", currentPuzzleIndex + 1);
+			snprintf(timeText.text, sizeof timeText.text, "Time: %1.4f", fireYoffset);
+			levelText.size = GetFontSize(mx16Font, levelText);
+			timeText.size = GetFontSize(mx16Font, timeText);
 
 			break;
 		case END:
@@ -319,7 +416,7 @@ int main()
 			break;
 		case LOST:
 			UpdateMusicStream(fireMusic);
-			time += dt;
+
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { 0.5f }, SHADER_UNIFORM_FLOAT);
 			if (IsKeyPressed(KEY_R))
@@ -342,13 +439,6 @@ int main()
 		switch (gameState)
 		{
 		case START:
-
-			if (isCRTOn)
-			{
-				DrawTextEx(mx16Font, "Pipe Connections", (Vector2) { 22, 20 }, 10.f, 1.f, WHITE);
-				DrawTextEx(mx16Font, "Press 'P' to play", (Vector2) { 25, 40 }, 8.f, 1.f, WHITE);
-			}
-
 			break;
 		case PLAYING:
 			// Draw fire
@@ -360,44 +450,19 @@ int main()
 			DrawBoxes(boxes, atlasTexture);
 
 			// Draw player
-			DrawRectangleLines(player.pos.x, player.pos.y, CELL_SIZE, CELL_SIZE, WHITE);
-
-			if (isCRTOn)
-			{
-				DrawText(levelStr, 10, 10, 10, WHITE);
-				DrawText(timeStr, 10, 20, 10, WHITE);
-			}
-			
+			DrawRectangleLines(player.pos.x, player.pos.y, CELL_SIZE, CELL_SIZE, WHITE);			
 			break;
 		case END:
 			DrawBoxes(boxes, atlasTexture);
-			if (isCRTOn)
-			{
-				DrawTextEx(mx16Font, "Thanks for Playing", (Vector2) { 15, 20 }, 10.f, 1.f, WHITE);
-			}
-			
 			break;
 		case WON:
 			DrawBoxes(boxes, atlasTexture);
-			if (isCRTOn)
-			{
-				DrawText(levelStr, 10, 10, 10, WHITE);
-				DrawText(timeStr, 10, 20, 10, WHITE);
-				DrawTextEx(mx16Font, "Doused", (Vector2) { 35, 12 }, 16.f, 1.f, WHITE);
-				DrawText("Press 'N' to next level", 8, 24, 8, WHITE);
-			}
 			break;
 		case LOST:
+			DrawBoxes(boxes, atlasTexture);
 			BeginShaderMode(fireShader);
 			DrawTexture(noiseTexture, 0, 0, WHITE);
 			EndShaderMode();
-			if (isCRTOn)
-			{
-				DrawText(levelStr, 10, 10, 10, WHITE);
-				DrawText(timeStr, 10, 20, 10, WHITE);
-				DrawTextEx(mx16Font, "BURNNN'D!", (Vector2) { 35, 12 }, 16.f, 1.f, WHITE);
-				DrawText("Press 'R' to restart", 12, 24, 8, WHITE);
-			}
 			break;
 		default:
 			break;
@@ -408,76 +473,57 @@ int main()
 		
 		BeginDrawing();
 		ClearBackground(RAYWHITE);
-		if (isCRTOn)
-		{
-			BeginShaderMode(crtShader);
-		}
+
 		
 		Rectangle source = { 0.0f, 0.0f, (float)renderTexture.texture.width, (float)-renderTexture.texture.height };
 		Rectangle dest = { 0, 0, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT };
 
 		DrawTexturePro(renderTexture.texture, source, dest, (Vector2) { 0, 0 }, 0.f, WHITE);
 
+		// Draw custom cursor
+		/*Vector2 mousePosition = GetMousePosition();
+		DrawTextureEx(wrenchTexture, mousePosition, 0.f, 4.f, WHITE);*/
+
 		switch (gameState)
 		{
 		case START:
-			if (!isCRTOn)
-			{
-				DrawTextEx(mxFont, "Pipe Connections", (Vector2) { 180, 100 }, 72.f, 1.f, WHITE);
-				DrawTextEx(mx16Font, "Press 'P' to play", (Vector2) { 250, 200 }, 32.f, 1.f, WHITE);
-			}
-			GuiButton((Rectangle){ GAME_WIDTH/2.f, GAME_HEIGHT/2.f, 120, 30 }, "Hello");
+			
+			DrawCustomText(mx16Font, titleText);
+			DrawCustomText(mx16Font, playText);
 			break;
+		
 		case PLAYING:
-			if (!isCRTOn)
-			{
-				DrawTextEx(mx16Font, levelStr, (Vector2) { 10, 10 }, 32.f, 1.f, WHITE);
-				DrawTextEx(mx16Font, timeStr, (Vector2) { 10, 50 }, 32.f, 1.f, WHITE);
-			}
-			break;
-		case END:
-			if (!isCRTOn)
-			{
-				DrawTextEx(mxFont, "Thanks for Playing", (Vector2) { 150, 100 }, 72.f, 1.f, WHITE);
-			}
+			DrawCustomText(mx16Font, levelText);
+			DrawCustomText(mx16Font, timeText);
 			break;
 		case WON:
-			if (!isCRTOn)
-			{
-				DrawTextEx(mx16Font, levelStr, (Vector2) { 10, 10 }, 32.f, 1.f, WHITE);
-				DrawTextEx(mx16Font, timeStr, (Vector2) { 10, 50 }, 32.f, 1.f, WHITE);
-				DrawTextEx(mxFont, "Doused", (Vector2) { 290, 50}, 72.f, 1.f, WHITE);
-				DrawTextEx(mx16Font, "Press 'N' to next level", (Vector2) { 220, 150.f }, 32.f, 1.f, WHITE);
-			}
+			DrawCustomText(mx16Font, levelText);
+			DrawCustomText(mx16Font, timeText);
+			DrawCustomText(mx16Font, wonText);
+			DrawCustomText(mx16Font, nextText);
 			break;
 		case LOST:
-			if (!isCRTOn)
-			{
-				DrawTextEx(mx16Font, levelStr, (Vector2) { 10, 10 }, 32.f, 1.f, WHITE);
-				DrawTextEx(mx16Font, timeStr, (Vector2) { 10, 50 }, 32.f, 1.f, WHITE);
-				DrawTextEx(mxFont, "BURNNN'D!", (Vector2) { 290, 50}, 72.f, 1.f, WHITE);
-				DrawTextEx(mx16Font, "Press 'R' to restart", (Vector2) { 230, 150.f}, 32.f, 1.f, WHITE);
-			}
+			DrawCustomText(mx16Font, burnedText);
+			DrawCustomText(mx16Font, restartText);
+			break;
+		case END:
+			DrawCustomText(mx16Font, endText);
 			break;
 		default:
 			break;
 		}
 
-		// Draw custom cursor
-		/*Vector2 mousePosition = GetMousePosition();
-		DrawTextureEx(wrenchTexture, mousePosition, 0.f, 4.f, WHITE);*/
-
-		if (isCRTOn)
-		{
-			EndShaderMode();
-		}
 		EndDrawing();
 	}
 
 	UnloadShader(fireShader);
-	UnloadTexture(noiseTexture);
-	UnloadTexture(atlasTexture);
+	UnloadMusicStream(bgMusic);
 	UnloadMusicStream(fireMusic);
+	UnloadSound(wrenchSnd);
+	UnloadFont(mx16Font);
+	UnloadTexture(noiseTexture);
+	UnloadTexture(bricksTexture);
+	UnloadTexture(atlasTexture);
 	UnloadRenderTexture(renderTexture);
 	CloseAudioDevice();
 	CloseWindow();
@@ -674,4 +720,20 @@ void CheckForAdjacentBox(struct Box boxes[BOX_COUNT], struct Box* box, Vector2 p
 
 	}
 
+}
+
+
+Vector2 GetFontOrigin(struct Text textData) 
+{
+	return (Vector2){textData.size.x/2.f, textData.size.y/2.f};
+}
+
+Vector2 GetFontSize(Font font, struct Text textData) 
+{
+	return MeasureTextEx(font, textData.text, textData.fontSize, textData.spacing);
+}
+
+void DrawCustomText(Font font, struct Text textData) 
+{
+	DrawTextPro(font, textData.text, textData.pos, textData.origin, 0.f, textData.fontSize, textData.spacing, WHITE);
 }

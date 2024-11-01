@@ -11,11 +11,11 @@ vec2 uv_curve(vec2 uv) {
     uv = (uv - 0.5) * 2.0;
 
     // Curvature adjustments
-    uv.x *= 1.0 + pow(abs(uv.y) / 4.0, 2.0);
-    uv.y *= 1.0 + pow(abs(uv.x) / 4.0, 2.0);
+    uv.x *= 1.0 + pow(abs(uv.y) / 6.0, 2.0);
+    uv.y *= 1.0 + pow(abs(uv.x) / 6.0, 2.0);
 
     // Optional scaling effect
-    uv /= 1.2;
+    //uv /= 1.2f;
 
     uv = (uv / 2.0) + 0.5;
     return uv;

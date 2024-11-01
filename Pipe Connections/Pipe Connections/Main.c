@@ -2,9 +2,6 @@
 #include "raylib.h"
 #include "raymath.h"
 
-#define RAYGUI_IMPLEMENTATION
-#include "raygui.h"
-
 #include <stdio.h>
 
 #define GAME_WIDTH 128.f
@@ -195,9 +192,9 @@ int main()
 		.isHovering = false
 	};
 
-	bool isCRTOn = false;
+	bool isCRTOn = true;
 
-	enum State gameState = START;
+	enum State gameState = PLAYING;
 
 	//DisableCursor();
 
