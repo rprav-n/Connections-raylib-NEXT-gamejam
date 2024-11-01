@@ -20,7 +20,7 @@ void main() {
     // Manipulate color based on vertical position
     vec4 color = noiseColor;
     color.rgb += vec3(fragTexCoord.y - yOffset);
-    color.rgb = step(color.rgb, vec3(0.5));
+    color.rgb = step(color.rgb, vec3(0.3));
     color.rgb = vec3(1.0) - color.rgb;
     color.a = color.r;
     color.rgb *= flameColor;

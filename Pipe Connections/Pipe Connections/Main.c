@@ -1,3 +1,4 @@
+//#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 #include "raylib.h"
 #include "raymath.h"
 #include <stdio.h>
@@ -75,6 +76,7 @@ int main()
 {
 
 	InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Pipe Connections");
+	InitAudioDevice();
 
 	Texture2D atlasTexture = LoadTexture("..\\..\\atlas.png");
 	Texture2D bricksTexture = LoadTexture("..\\..\\bricks.png");
@@ -84,11 +86,19 @@ int main()
 
 	Font mxFont = LoadFont("..\\..\\m6x11plus.ttf");
 
-	Shader shader = LoadShader(NULL, "fire.fs");
+	Music fireMusic = LoadMusicStream("..\\..\\flame.mp3");
+	PlayMusicStream(fireMusic);
+
+	Shader fireShader = LoadShader(NULL, "fire.fs");
+	Shader crtShader = LoadShader(NULL, "crt.fs");
 	Texture2D noiseTexture = LoadTexture("..\\..\\noise.png");
 
-	SetShaderValue(shader, GetShaderLocation(shader, "flameColor"), (float[3]) { 1.0f, 0.5f, 0.0f }, SHADER_UNIFORM_VEC3);
-	SetShaderValue(shader, GetShaderLocation(shader, "animationSpeed"), (float[1]) { 0.5f }, SHADER_UNIFORM_FLOAT);
+	// { 1.0f, 0.25f, 0.25f } valve red color = #ff4242
+	// { 1.0f, 0.5f, 0.0f } = orange colr = #ff8000
+	float orangeColor[3] = { 1.0f, 0.5f, 0.0f };
+
+	SetShaderValue(fireShader, GetShaderLocation(fireShader, "flameColor"), orangeColor, SHADER_UNIFORM_VEC3);
+	SetShaderValue(fireShader, GetShaderLocation(fireShader, "animationSpeed"), (float[1]) { 0.5f }, SHADER_UNIFORM_FLOAT);
 
 	Rectangle fireSource = (Rectangle){
 		.x = 0.f, 
@@ -163,20 +173,26 @@ int main()
 	float time = 0.0f;
 	float fireYoffset = 1.2f;
 	char str[5];
+	
 
 	SetTargetFPS(FPS);
 	while (!WindowShouldClose())
 	{
+
 		float dt = GetFrameTime();
 		time += dt;
 
+		SetShaderValue(crtShader, GetShaderLocation(crtShader, "texture0"), &renderTexture, SHADER_UNIFORM_FLOAT);
+		SetShaderValue(crtShader, GetShaderLocation(crtShader, "scanline_count"), (float[1]){ 0.f }, SHADER_UNIFORM_FLOAT);
+
 		if (!puzzles[currentPuzzleIndex].isCorrect && !puzzles[currentPuzzleIndex].isLost)
 		{
+			UpdateMusicStream(fireMusic);
 
 			fireYoffset = Vector2MoveTowards((Vector2) { 0.f, fireYoffset }, (Vector2) { 0.f, -0.0f }, dt * 0.05f).y;
 			
-			SetShaderValue(shader, GetShaderLocation(shader, "time"), &time, SHADER_UNIFORM_FLOAT);
-			SetShaderValue(shader, GetShaderLocation(shader, "yOffset"), (float[1]) { fireYoffset }, SHADER_UNIFORM_FLOAT);
+			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
+			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { fireYoffset }, SHADER_UNIFORM_FLOAT);
 
 
 			if (fireYoffset <= 0.0f)
@@ -268,45 +284,9 @@ int main()
 		DrawTexture(bricksTexture, 0, 0, WHITE);
 
 		// Draw fire
-		BeginShaderMode(shader);
+		BeginShaderMode(fireShader);
 		DrawTexture(noiseTexture, 0, 0, WHITE);
 		EndShaderMode();
-
-		// Draw rectangle backgrounds
-		/*for (int x = SPACING; x < TOTAL_COUNT - SPACING; x++)
-		{
-			for (int y = SPACING; y < TOTAL_COUNT - SPACING; y++)
-			{
-				if (y % 2 == 0)
-				{
-					if (x % 2 == 0)
-					{
-						DrawRectangle(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, LIGHTGRAY);
-					}
-					else
-					{
-						DrawRectangle(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, GRAY);
-					}
-				}
-				else
-				{
-					if (x % 2 == 0)
-					{
-						DrawRectangle(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, GRAY);
-					}
-					else
-					{
-						DrawRectangle(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, LIGHTGRAY);
-					}
-				}
-			}
-		}*/
-
-		// Draw border
-		//DrawRectangleLines(START, START, END, END, BLACK);
-
-		// Draw BG
-		//DrawRectangle(START, START, END, END, GetColor(0x4d2b32ff));
 
 		// Draw sprites
 		for (int i = 0; i < ROWS; i++)
@@ -328,14 +308,14 @@ int main()
 		}
 
 		// Draw player
-		DrawRectangleLines(player.pos.x, player.pos.y, CELL_SIZE, CELL_SIZE, RED);
+		DrawRectangleLines(player.pos.x, player.pos.y, CELL_SIZE, CELL_SIZE, WHITE);
 
 		EndTextureMode();
 
-
+		
 		BeginDrawing();
 		ClearBackground(RAYWHITE);
-
+		//BeginShaderMode(crtShader);
 		Rectangle source = { 0.0f, 0.0f, (float)renderTexture.texture.width, (float)-renderTexture.texture.height };
 		Rectangle dest = { 0, 0, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT };
 
@@ -344,27 +324,29 @@ int main()
 		// Draw player won
 		if (puzzles[currentPuzzleIndex].isCorrect)
 		{
-			DrawRectangleLines(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, GREEN);
-			DrawTextEx(mxFont, "Fire was put out!", (Vector2) { WINDOW_WIDTH / 2.f - 210.f, WINDOW_HEIGHT / 8.f }, 72.f, 1.f, BLACK);
+			//DrawRectangleLines(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, GREEN);
+			DrawRectangle(0, 80, WINDOW_WIDTH, 100, BLACK);
+			DrawTextEx(mxFont, "Fire's put out!", (Vector2) { WINDOW_WIDTH / 2.f - 180.f, 90 }, 72.f, 1.f, WHITE);
 		}
-
+		
 		if (puzzles[currentPuzzleIndex].isLost)
 		{
-			DrawTextEx(mxFont, "BURNED!!!", (Vector2) { WINDOW_WIDTH / 2.f - 170.f, WINDOW_HEIGHT / 8.f }, 72.f, 1.f, RED);
+			DrawTextEx(mxFont, "You let fire burn the place!", (Vector2) { 50.f, WINDOW_HEIGHT / 8.f }, 72.f, 1.f, RED);
 		}
-	
+
 		
 		sprintf_s(str, sizeof(str), "%1.1f", fireYoffset);
 
-		DrawText(str, 0, 0, 32.f, BLACK);
-
+		//EndShaderMode();
 		EndDrawing();
 	}
 
-	UnloadShader(shader);
+	UnloadShader(fireShader);
 	UnloadTexture(noiseTexture);
 	UnloadTexture(atlasTexture);
+	UnloadMusicStream(fireMusic);
 	UnloadRenderTexture(renderTexture);
+	CloseAudioDevice();
 	CloseWindow();
 
 	return 0;
