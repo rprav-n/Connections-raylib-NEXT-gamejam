@@ -18,7 +18,9 @@
 #define START_POS (CELL_SIZE * SPACING)
 #define END_POS (BOX_COUNT * ROWS)
 #define TOTAL_PUZZLES 2
-#define FIRE_MOVE_SPEED 8.f
+#define FIRE_MOVE_SPEED 0.015f
+#define BUTTON_WIDTH 64
+#define BUTTON_HEIGHT 32
 
 enum Direction
 {
@@ -74,6 +76,14 @@ struct Puzzle
 	bool isLost;
 };
 
+struct Button
+{
+	Vector2 pos;
+	Vector2 size;
+	char text[50];
+	bool isHovering;
+};
+
 void InitBoxes(struct Box boxes[BOX_COUNT], struct Puzzle puzzle);
 void DrawBoxes(struct Box boxes[BOX_COUNT], Texture2D atlasTexture);
 void RotateBox(struct Box* box);
@@ -97,12 +107,18 @@ int main()
 	Font mxFont = LoadFont("..\\..\\m6x11plus.ttf");
 	Font mx16Font = LoadFont("..\\..\\m6x11.ttf");
 
-	Sound wrenchSnd = LoadSound("..\\..\\wrench.mp3");
-	SetSoundVolume(wrenchSnd, 4.f);
+	Sound wrenchSnd = LoadSound("..\\..\\wrench.wav");
+	SetSoundVolume(wrenchSnd, 2.f);
+
+	Texture2D wrenchTexture = LoadTexture("..\\..\\wrench.png");
 
 	Music fireMusic = LoadMusicStream("..\\..\\flame.mp3");
-	SetMusicVolume(fireMusic, 0.4f);
+	SetMusicVolume(fireMusic, 0.2f);
 	PlayMusicStream(fireMusic);
+
+	Music bgMusic = LoadMusicStream("..\\..\\bg_music.ogg");
+	SetMusicVolume(bgMusic, 0.4f);
+	PlayMusicStream(bgMusic);
 
 	Shader fireShader = LoadShader(NULL, "fire.fs");
 	Shader crtShader = LoadShader(NULL, "crt.fs");
@@ -163,16 +179,24 @@ int main()
 
 	float time = 0.0f;
 	float fireYoffset = 1.f;
+	float wrenchRotation = 0.f;
 	char timeStr[20];
 	char levelStr[20];
 
+	// Create all buttons
+	struct Button startBtn = {
+		.pos = (Vector2){0, 0},
+		.size = (Vector2){50, 20},
+		.text = "Start"
+	};
+
 	bool isCRTOn = false;
 
-	SetTargetFPS(FPS);
-
-	bool isGameEnd = false;
-
 	enum State gameState = START;
+
+	//DisableCursor();
+
+	SetTargetFPS(FPS);
 
 	while (!WindowShouldClose())
 	{
@@ -182,6 +206,8 @@ int main()
 		{
 			isCRTOn = !isCRTOn;
 		}
+
+		UpdateMusicStream(bgMusic);
 
 		// Update Code
 		switch (gameState)
@@ -201,7 +227,7 @@ int main()
 			{
 				UpdateMusicStream(fireMusic);
 
-				fireYoffset = Vector2MoveTowards((Vector2) { 0.f, fireYoffset }, (Vector2) { 0.f, -0.0f }, dt * 0.025f).y;
+				fireYoffset = Vector2MoveTowards((Vector2) { 0.f, fireYoffset }, (Vector2) { 0.f, -0.0f }, dt * FIRE_MOVE_SPEED).y;
 
 				SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
 				SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { fireYoffset }, SHADER_UNIFORM_FLOAT);
@@ -250,6 +276,8 @@ int main()
 					{
 						RotateBox(&boxes[index]);
 						PlaySound(wrenchSnd);
+
+						wrenchRotation += 90.f;
 					}
 				}
 			}
@@ -339,11 +367,14 @@ int main()
 		switch (gameState)
 		{
 		case START:
+
 			if (isCRTOn)
 			{
 				DrawTextEx(mx16Font, "Pipe Connections", (Vector2) { 22, 20 }, 10.f, 1.f, WHITE);
 				DrawTextEx(mx16Font, "Press 'P' to play", (Vector2) { 25, 40 }, 8.f, 1.f, WHITE);
 			}
+
+			bool buttonClicked = GuiButton((Rectangle) { 350, 200, 100, 30 }, "Click Me!");
 			
 			break;
 		case PLAYING:
@@ -450,7 +481,10 @@ int main()
 			break;
 		}
 
-		
+		// Draw custom cursor
+		/*Vector2 mousePosition = GetMousePosition();
+		DrawTextureEx(wrenchTexture, mousePosition, 0.f, 4.f, WHITE);*/
+
 		if (isCRTOn)
 		{
 			EndShaderMode();
