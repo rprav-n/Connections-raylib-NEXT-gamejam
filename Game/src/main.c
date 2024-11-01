@@ -80,13 +80,6 @@ struct Puzzle
 	bool isLost;
 };
 
-struct Button
-{
-	Vector2 pos;
-	Vector2 size;
-	char text[50];
-	bool isHovering;
-};
 
 void InitBoxes(struct Box boxes[BOX_COUNT], struct Puzzle puzzle);
 void DrawBoxes(struct Box boxes[BOX_COUNT], Texture2D atlasTexture);
@@ -101,54 +94,38 @@ int main()
 	InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Pipe Connections");
 	InitAudioDevice();
 
-	Texture2D atlasTexture = LoadTexture("..\\..\\atlas.png");
-	Texture2D bricksTexture = LoadTexture("..\\..\\bricks.png");
-	Texture2D waterDropTexture = LoadTexture("..\\..\\water_drop.png");
+	Texture2D atlasTexture = LoadTexture("assets/atlas.png");
+	Texture2D bricksTexture = LoadTexture("assets/bricks.png");
 
 	RenderTexture2D renderTexture = LoadRenderTexture(GAME_WIDTH, GAME_HEIGHT);
 	SetTextureFilter(renderTexture.texture, TEXTURE_FILTER_POINT);
 
-	Font mxFont = LoadFont("..\\..\\m6x11plus.ttf");
-	Font mx16Font = LoadFont("..\\..\\m6x11.ttf");
+	Font mxFont = LoadFont("assets/m6x11plus.ttf");
+	Font mx16Font = LoadFont("assets/m6x11.ttf");
 
-	Sound wrenchSnd = LoadSound("..\\..\\wrench.wav");
+	Sound wrenchSnd = LoadSound("assets/wrench.wav");
 	SetSoundVolume(wrenchSnd, 2.f);
 
-	Texture2D wrenchTexture = LoadTexture("..\\..\\wrench.png");
 
-	Music fireMusic = LoadMusicStream("..\\..\\flame.mp3");
+	Music fireMusic = LoadMusicStream("assets/flame.mp3");
 	SetMusicVolume(fireMusic, 0.2f);
 	PlayMusicStream(fireMusic);
 
-	Music bgMusic = LoadMusicStream("..\\..\\bg_music.ogg");
+	Music bgMusic = LoadMusicStream("assets/bg_music.ogg");
 	SetMusicVolume(bgMusic, 0.4f);
 	PlayMusicStream(bgMusic);
 
-	Shader fireShader = LoadShader(NULL, "fire.fs");
-	Shader crtShader = LoadShader(NULL, "crt.fs");
-	Texture2D noiseTexture = LoadTexture("..\\..\\noise.png");
+	Shader fireShader = LoadShader(NULL, "shaders/fire.fs");
+	Shader crtShader = LoadShader(NULL, "shaders/crt.fs");
+	Texture2D noiseTexture = LoadTexture("assets/noise.png");
 
 	// { 1.0f, 0.25f, 0.25f } valve red color = #ff4242
 	// { 1.0f, 0.5f, 0.0f } = orange colr = #ff8000
 	float orangeColor[3] = { 1.0f, 0.5f, 0.0f };
-	Color redColor = GetColor(0xff4242ff);
 
 	SetShaderValue(fireShader, GetShaderLocation(fireShader, "flameColor"), orangeColor, SHADER_UNIFORM_VEC3);
 	SetShaderValue(fireShader, GetShaderLocation(fireShader, "animationSpeed"), (float[1]) { 0.5f }, SHADER_UNIFORM_FLOAT);
 
-	Rectangle fireSource = (Rectangle){
-		.x = 0.f, 
-		.y = 32.f,
-		.width = GAME_WIDTH,
-		.height = GAME_HEIGHT,
-	};
-
-	Rectangle fireDest = (Rectangle){
-		.x = 0.f,
-		.y = GAME_HEIGHT,
-		.width = GAME_WIDTH,
-		.height = GAME_HEIGHT,
-	};
 
 	struct Player player = {
 		.pos = (Vector2){ (float)START_POS, (float)START_POS }
@@ -157,7 +134,7 @@ int main()
 	struct Puzzle puzzles[TOTAL_PUZZLES];
 
 	int currentPuzzleIndex = 0;
-	bool isNextBtnPressed = false;
+	
 	puzzles[0] = (struct Puzzle){
 		.puzzleGrid = {
 			{3, 1, 2, 1},
@@ -187,13 +164,6 @@ int main()
 	char timeStr[20];
 	char levelStr[20];
 
-	// Create all buttons
-	struct Button startBtn = {
-		.pos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f},
-		.size = (Vector2){100, 40},
-		.text = "Start",
-		.isHovering = false
-	};
 
 	bool isCRTOn = false;
 
@@ -411,6 +381,8 @@ int main()
 			DrawBoxes(boxes, atlasTexture);
 			if (isCRTOn)
 			{
+				DrawText(levelStr, 10, 10, 10, WHITE);
+				DrawText(timeStr, 10, 20, 10, WHITE);
 				DrawTextEx(mx16Font, "Doused", (Vector2) { 35, 12 }, 16.f, 1.f, WHITE);
 				DrawText("Press 'N' to next level", 8, 24, 8, WHITE);
 			}
@@ -421,6 +393,8 @@ int main()
 			EndShaderMode();
 			if (isCRTOn)
 			{
+				DrawText(levelStr, 10, 10, 10, WHITE);
+				DrawText(timeStr, 10, 20, 10, WHITE);
 				DrawTextEx(mx16Font, "BURNNN'D!", (Vector2) { 35, 12 }, 16.f, 1.f, WHITE);
 				DrawText("Press 'R' to restart", 12, 24, 8, WHITE);
 			}
@@ -452,8 +426,7 @@ int main()
 				DrawTextEx(mxFont, "Pipe Connections", (Vector2) { 180, 100 }, 72.f, 1.f, WHITE);
 				DrawTextEx(mx16Font, "Press 'P' to play", (Vector2) { 250, 200 }, 32.f, 1.f, WHITE);
 			}
-			DrawRectangleV(startBtn.pos, startBtn.size, WHITE);
-			DrawTextEx(mx16Font, startBtn.text, startBtn.pos, 16.f, 1.f, BLACK);
+			GuiButton((Rectangle){ GAME_WIDTH/2.f, GAME_HEIGHT/2.f, 120, 30 }, "Hello");
 			break;
 		case PLAYING:
 			if (!isCRTOn)
@@ -471,6 +444,8 @@ int main()
 		case WON:
 			if (!isCRTOn)
 			{
+				DrawTextEx(mx16Font, levelStr, (Vector2) { 10, 10 }, 32.f, 1.f, WHITE);
+				DrawTextEx(mx16Font, timeStr, (Vector2) { 10, 50 }, 32.f, 1.f, WHITE);
 				DrawTextEx(mxFont, "Doused", (Vector2) { 290, 50}, 72.f, 1.f, WHITE);
 				DrawTextEx(mx16Font, "Press 'N' to next level", (Vector2) { 220, 150.f }, 32.f, 1.f, WHITE);
 			}
@@ -478,6 +453,8 @@ int main()
 		case LOST:
 			if (!isCRTOn)
 			{
+				DrawTextEx(mx16Font, levelStr, (Vector2) { 10, 10 }, 32.f, 1.f, WHITE);
+				DrawTextEx(mx16Font, timeStr, (Vector2) { 10, 50 }, 32.f, 1.f, WHITE);
 				DrawTextEx(mxFont, "BURNNN'D!", (Vector2) { 290, 50}, 72.f, 1.f, WHITE);
 				DrawTextEx(mx16Font, "Press 'R' to restart", (Vector2) { 230, 150.f}, 32.f, 1.f, WHITE);
 			}
@@ -619,6 +596,7 @@ int GetBoxIndexByPos(struct Box boxes[BOX_COUNT], Vector2 pos)
 			return boxes[i].index;
 		}
 	}
+	return -1;
 }
 
 
