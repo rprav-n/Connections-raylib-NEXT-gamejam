@@ -1,4 +1,3 @@
-//#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 #include "raylib.h"
 #include "raymath.h"
 
@@ -19,18 +18,6 @@
 #define START_POS (CELL_SIZE * SPACING)
 #define END_POS (BOX_COUNT * ROWS)
 #define TOTAL_PUZZLES 4
-#define FIRE_MOVE_SPEED 0.0f
-#define BUTTON_WIDTH 64
-#define BUTTON_HEIGHT 32
-
-/* 
-	int blackColor = 0x000000ff;
-	int whiteColor = 0xffffffff;
-	int blueColor = 0x29adffff;
-	int redColor = 0xff4242ff;
-	int greenColor = 0x45e082ff;
-	int orangeColor = 0xff8000ff; // color used for flames
-*/
 
 enum Direction
 {
@@ -84,6 +71,7 @@ struct Puzzle
 	int puzzleGrid[ROWS][ROWS];
 	bool isCorrect;
 	bool isLost;
+	float levelTime;
 };
 
 struct Text 
@@ -188,6 +176,7 @@ int main()
 			{12, 8, 10, 7},
 			{3, 12, 4, 11},
 		},
+		.levelTime = 60.f,
 		.isCorrect = false,
 	};
 	puzzles[1] = (struct Puzzle){
@@ -197,6 +186,7 @@ int main()
 			{2, 5, 8, 12},
 			{3, 6, 5, 12}
 		},
+		.levelTime = 50.f,
 		.isCorrect = false,
 	};
 	puzzles[2] = (struct Puzzle){
@@ -206,6 +196,7 @@ int main()
 			{3, 14, 8, 11},
 			{3, 6, 14, 4}
 		},
+		.levelTime = 40.f,
 		.isCorrect = false,
 	};
 	puzzles[3] = (struct Puzzle){
@@ -215,6 +206,7 @@ int main()
 			{2, 9, 8, 5},
 			{1, 13, 1, 4}
 		},
+		.levelTime = 30.f,
 		.isCorrect = false,
 	};
 
@@ -222,7 +214,7 @@ int main()
 
 	InitBoxes(boxes, puzzles[currentPuzzleIndex]);
 
-	float time = 0.0f;
+	float fireTime = 0.0f;
 	float fireYoffset = 1.f;
 	float wrenchRotation = 0.f;
 
@@ -344,11 +336,13 @@ int main()
 	float shakeDuration = 0.0f;
     float shakeIntensity = 4.0f;
 
+	float currentLevelTime = puzzles[currentPuzzleIndex].levelTime; // in seconds
+
 	while (!WindowShouldClose())
 	{
 		// Common state
 		float dt = GetFrameTime();
-		time += dt;
+		fireTime += dt;
 
 		if (shouldCameraShake)
         {
@@ -405,26 +399,32 @@ int main()
 				}
 				if (IsKeyPressed(KEY_P))
 				{
+					currentLevelTime = puzzles[currentPuzzleIndex].levelTime;
 					fadeIn.to = PLAYING;
 					fadeIn.isStarted = true;
 				}
 			}
 			UpdateMusicStream(fireMusic);
-			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
+			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &fireTime, SHADER_UNIFORM_FLOAT);
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { 0.65f }, SHADER_UNIFORM_FLOAT);
 			
 			break;
 		case PLAYING:
+			currentLevelTime -= dt;
+			if (currentLevelTime < 0 ){
+				currentLevelTime = 0;
+			}
+			// printf("%f\n", currentLevelTime);
 			UpdateMusicStream(fireMusic);
-			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
+			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &fireTime, SHADER_UNIFORM_FLOAT);
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { fireYoffset }, SHADER_UNIFORM_FLOAT);
 			if (fadeOut.isCompleted && !fadeIn.isStarted) {
 				if (!puzzles[currentPuzzleIndex].isCorrect && !puzzles[currentPuzzleIndex].isLost)
 				{
 
-					fireYoffset = Vector2MoveTowards((Vector2) { 0.f, fireYoffset }, (Vector2) { 0.f, -0.0f }, dt * FIRE_MOVE_SPEED).y;
+					fireYoffset = 1.f * (currentLevelTime / puzzles[currentPuzzleIndex].levelTime);
 
-					if (fireYoffset <= 0.0f)
+					if (fireYoffset <= 0.0f || currentLevelTime <= 0.f)
 					{
 						fadeIn.to = LOST;
 						fadeIn.isStarted = true;
@@ -500,7 +500,7 @@ int main()
 				}
 
 				snprintf(levelText.text, sizeof levelText.text, "Level: %d", currentPuzzleIndex + 1);
-				snprintf(timeText.text, sizeof timeText.text, "Time: %1.4f", fireYoffset);
+				snprintf(timeText.text, sizeof timeText.text, "Time: %1.1f", currentLevelTime);
 				levelText.size = GetFontSize(mx16Font, levelText);
 				timeText.size = GetFontSize(mx16Font, timeText);
 
@@ -538,6 +538,7 @@ int main()
 				if (IsKeyPressed(KEY_N))
 				{
 					InitBoxes(boxes, puzzles[currentPuzzleIndex]);
+					currentLevelTime = puzzles[currentPuzzleIndex].levelTime;
 					fireYoffset = 1.f;
 					fadeIn.to = PLAYING;
 					fadeIn.isStarted = true;
@@ -548,12 +549,13 @@ int main()
 		case LOST:
 			UpdateMusicStream(fireMusic);
 
-			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
+			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &fireTime, SHADER_UNIFORM_FLOAT);
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { 0.5f }, SHADER_UNIFORM_FLOAT);
 			if (fadeOut.isCompleted && !fadeIn.isStarted) {
 				if (IsKeyPressed(KEY_R))
 				{
 					InitBoxes(boxes, puzzles[currentPuzzleIndex]);
+					currentLevelTime = puzzles[currentPuzzleIndex].levelTime;
 					fireYoffset = 1.f;
 					fadeIn.to = PLAYING;
 					fadeIn.isStarted = true;
@@ -568,7 +570,7 @@ int main()
 		BeginTextureMode(renderTexture);
 		ClearBackground(whiteColor);
 
-		// Draw brickS
+		// Draw bricks
 		DrawTexture(bricksTexture, 0, 0, whiteColor);
 
 		switch (gameState)
@@ -584,6 +586,37 @@ int main()
 			BeginShaderMode(fireShader);
 			DrawTexture(noiseTexture, 0, 0, whiteColor);
 			EndShaderMode();
+
+
+			// Draw rectangle line or background 
+			/* for (int x = SPACING; x < TOTAL_COUNT - SPACING; x++)
+			{
+				for (int y = SPACING; y < TOTAL_COUNT - SPACING; y++)
+				{
+					if (y % 2 == 0)
+					{
+						if (x % 2 == 0)
+						{
+							DrawRectangleLines(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, LIGHTGRAY);
+						}
+						else
+						{
+							DrawRectangleLines(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, GRAY);
+						}
+					}
+					else
+					{
+						if (x % 2 == 0)
+						{
+							DrawRectangleLines(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, GRAY);
+						}
+						else
+						{
+							DrawRectangleLines(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE, LIGHTGRAY);
+						}
+					}
+				}
+			} */
 
 			// Draw boxes
 			DrawBoxes(boxes, atlasTexture);
