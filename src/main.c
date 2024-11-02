@@ -19,7 +19,7 @@
 #define START_POS (CELL_SIZE * SPACING)
 #define END_POS (BOX_COUNT * ROWS)
 #define TOTAL_PUZZLES 4
-#define FIRE_MOVE_SPEED 0.05f
+#define FIRE_MOVE_SPEED 0.0f
 #define BUTTON_WIDTH 64
 #define BUTTON_HEIGHT 32
 
@@ -99,6 +99,16 @@ struct Text
 	Vector2 size;
 };
 
+struct Transition
+{
+	Vector2 pos;
+	Vector2 size;
+	enum State to;
+	int speed;
+	bool isStarted;
+	bool isCompleted;
+};
+
 
 void InitBoxes(struct Box boxes[BOX_COUNT], struct Puzzle puzzle);
 void DrawBoxes(struct Box boxes[BOX_COUNT], Texture2D atlasTexture);
@@ -108,6 +118,7 @@ void CheckForAdjacentBox(struct Box boxes[BOX_COUNT], struct Box* box, Vector2 p
 Vector2 GetFontOrigin(struct Text textData);
 Vector2 GetFontSize(Font font, struct Text textData);
 void DrawCustomText(Font font, struct Text textData);
+void ResetFadeTransition(struct Transition* fade, bool isFadeOut);
 
 int main()
 {
@@ -181,28 +192,28 @@ int main()
 	};
 	puzzles[1] = (struct Puzzle){
 		.puzzleGrid = {
-			{13, 14, 2, 3},
-			{2, 11, 7, 5},
-			{3, 12, 8, 9},
-			{2, 9, 14, 3}
+			{1, 1, 2, 12},
+			{12, 9, 9, 12},
+			{2, 5, 8, 12},
+			{3, 6, 5, 12}
 		},
 		.isCorrect = false,
 	};
 	puzzles[2] = (struct Puzzle){
 		.puzzleGrid = {
-			{13, 6, 5, 12},
-			{10, 8, 6, 10},
-			{10, 9, 1, 5},
-			{4, 3, 11, 11}
+			{11, 4, 4, 13},
+			{11, 7, 9, 13},
+			{3, 14, 8, 11},
+			{3, 6, 14, 4}
 		},
 		.isCorrect = false,
 	};
 	puzzles[3] = (struct Puzzle){
 		.puzzleGrid = {
-			{11, 8, 6, 12},
-			{5, 10, 8, 9},
-			{11, 7, 12, 6},
-			{2, 5, 5, 11}
+			{4, 4, 11, 14},
+			{11, 7, 9, 6},
+			{2, 9, 8, 5},
+			{1, 13, 1, 4}
 		},
 		.isCorrect = false,
 	};
@@ -307,6 +318,23 @@ int main()
 	endText.origin = GetFontOrigin(endText);
 	endText.pos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT/6.f};
 
+	struct Transition fadeOut = 
+	{
+		.pos = (Vector2){0, 0},
+		.size = (Vector2){WINDOW_WIDTH, WINDOW_HEIGHT},
+		.isCompleted = false,
+		.isStarted = true,
+		.speed = 20
+	};
+	struct Transition fadeIn = 
+	{
+		.pos = (Vector2){0, 0},
+		.size = (Vector2){WINDOW_WIDTH, 0},
+		.isCompleted = false,
+		.isStarted = false,
+		.speed = 20
+	};
+
 	enum State gameState = START;
 
 	//DisableCursor();
@@ -321,10 +349,6 @@ int main()
 		// Common state
 		float dt = GetFrameTime();
 		time += dt;
-
-		if (IsKeyPressed(KEY_G)) {
-			shouldCameraShake = true;
-		}
 
 		if (shouldCameraShake)
         {
@@ -352,159 +376,190 @@ int main()
 
 		UpdateMusicStream(bgMusic);
 
+		if (fadeOut.isStarted && !fadeOut.isCompleted) {
+			fadeOut.size = Vector2MoveTowards(fadeOut.size, (Vector2){fadeOut.size.x, 0.f}, fadeOut.speed);
+			if (fadeOut.size.y <= 0) {
+				fadeOut.isCompleted = true;
+			}
+		}  else if (fadeIn.isStarted && !fadeIn.isCompleted) {
+
+			fadeIn.size = Vector2MoveTowards(fadeIn.size, (Vector2){fadeIn.size.x, WINDOW_HEIGHT}, fadeIn.speed);
+			if (fadeIn.size.y >= WINDOW_HEIGHT) {
+				fadeIn.isCompleted = true;
+				gameState = fadeIn.to;
+				ResetFadeTransition(&fadeOut, true);
+				ResetFadeTransition(&fadeIn, false);
+			}
+		} 
+
+
 		// Update Code
 		switch (gameState)
 		{
 		case START:
 
-			playText.pos.y += playText.speed * dt;
-			if (playText.pos.y > playText.startPos.y + 30.f || playText.pos.y < playText.startPos.y) {
-				playText.speed *= -1;
+			if (fadeOut.isCompleted && !fadeIn.isStarted) {
+				playText.pos.y += playText.speed * dt;
+				if (playText.pos.y > playText.startPos.y + 30.f || playText.pos.y < playText.startPos.y) {
+					playText.speed *= -1;
+				}
+				if (IsKeyPressed(KEY_P))
+				{
+					fadeIn.to = PLAYING;
+					fadeIn.isStarted = true;
+				}
 			}
-
 			UpdateMusicStream(fireMusic);
-
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { 0.65f }, SHADER_UNIFORM_FLOAT);
-			if (IsKeyPressed(KEY_P))
-			{
-				gameState = PLAYING;
-			}
+			
 			break;
 		case PLAYING:
-			
-			if (!puzzles[currentPuzzleIndex].isCorrect && !puzzles[currentPuzzleIndex].isLost)
-			{
-				UpdateMusicStream(fireMusic);
-
-				fireYoffset = Vector2MoveTowards((Vector2) { 0.f, fireYoffset }, (Vector2) { 0.f, -0.0f }, dt * FIRE_MOVE_SPEED).y;
-				SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
-				SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { fireYoffset }, SHADER_UNIFORM_FLOAT);
-
-				if (fireYoffset <= 0.0f)
+			UpdateMusicStream(fireMusic);
+			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
+			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { fireYoffset }, SHADER_UNIFORM_FLOAT);
+			if (fadeOut.isCompleted && !fadeIn.isStarted) {
+				if (!puzzles[currentPuzzleIndex].isCorrect && !puzzles[currentPuzzleIndex].isLost)
 				{
-					gameState = LOST;
-				}
-			}
 
-			// Set visited to -1
-			Vector2 visited[BOX_COUNT];
-			for (int i = 0; i < BOX_COUNT; i++)
-			{
-				visited[i] = (Vector2){ -1, -1 };
-			}
+					fireYoffset = Vector2MoveTowards((Vector2) { 0.f, fireYoffset }, (Vector2) { 0.f, -0.0f }, dt * FIRE_MOVE_SPEED).y;
 
-			// Update mouse + player movement
-			Vector2 mousePosition = GetMousePosition();
-			Vector2 gridPosition = (Vector2){ floorf(mousePosition.x / (CELL_SIZE * SCALE_FACTOR)),
-					floorf(mousePosition.y / (CELL_SIZE * SCALE_FACTOR)) };
-
-			gridPosition.x = Clamp(gridPosition.x, SPACING, TOTAL_COUNT - SPACING - 1);
-			gridPosition.y = Clamp(gridPosition.y, SPACING, TOTAL_COUNT - SPACING - 1);
-
-			player.pos.x = gridPosition.x * CELL_SIZE;
-			player.pos.y = gridPosition.y * CELL_SIZE;
-
-			// Update box
-			for (int i = 0; i < ROWS; i++)
-			{
-				for (int j = 0; j < ROWS; j++)
-				{
-					int index = GetBoxIndexByPos(boxes, (Vector2) { i, j });
-
-					boxes[index].dest = (Rectangle){
-						((i + SPACING) * CELL_SIZE) + (CELL_SIZE / 2.f), ((j + SPACING) * CELL_SIZE) + (CELL_SIZE / 2.f),
-						CELL_SIZE,
-						CELL_SIZE
-					};
-
-					boxes[index].origin = (Vector2){ boxes[index].dest.width / 2.f, boxes[index].dest.height / 2.f };
-
-					if (boxes[index].x == gridPosition.x - 2 && boxes[index].y == gridPosition.y - 2 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)
-						&& !puzzles[currentPuzzleIndex].isCorrect && !puzzles[currentPuzzleIndex].isLost)
+					if (fireYoffset <= 0.0f)
 					{
-						RotateBox(&boxes[index]);
-						shouldCameraShake = true;
-						PlaySound(wrenchSnd);
+						fadeIn.to = LOST;
+						fadeIn.isStarted = true;
+					}
+				}
 
-						wrenchRotation += 90.f;
+				// Set visited to -1
+				Vector2 visited[BOX_COUNT];
+				for (int i = 0; i < BOX_COUNT; i++)
+				{
+					visited[i] = (Vector2){ -1, -1 };
+				}
+
+				// Update mouse + player movement
+				Vector2 mousePosition = GetMousePosition();
+				Vector2 gridPosition = (Vector2){ floorf(mousePosition.x / (CELL_SIZE * SCALE_FACTOR)),
+						floorf(mousePosition.y / (CELL_SIZE * SCALE_FACTOR)) };
+
+				gridPosition.x = Clamp(gridPosition.x, SPACING, TOTAL_COUNT - SPACING - 1);
+				gridPosition.y = Clamp(gridPosition.y, SPACING, TOTAL_COUNT - SPACING - 1);
+
+				player.pos.x = gridPosition.x * CELL_SIZE;
+				player.pos.y = gridPosition.y * CELL_SIZE;
+
+				// Update box
+				for (int i = 0; i < ROWS; i++)
+				{
+					for (int j = 0; j < ROWS; j++)
+					{
+						int index = GetBoxIndexByPos(boxes, (Vector2) { i, j });
+
+						boxes[index].dest = (Rectangle){
+							((i + SPACING) * CELL_SIZE) + (CELL_SIZE / 2.f), ((j + SPACING) * CELL_SIZE) + (CELL_SIZE / 2.f),
+							CELL_SIZE,
+							CELL_SIZE
+						};
+
+						boxes[index].origin = (Vector2){ boxes[index].dest.width / 2.f, boxes[index].dest.height / 2.f };
+
+						if (boxes[index].x == gridPosition.x - 2 && boxes[index].y == gridPosition.y - 2 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)
+							&& !puzzles[currentPuzzleIndex].isCorrect && !puzzles[currentPuzzleIndex].isLost)
+						{
+							RotateBox(&boxes[index]);
+							shouldCameraShake = true;
+							PlaySound(wrenchSnd);
+
+							wrenchRotation += 90.f;
+						}
+					}
+				}
+
+				// Set all water connection to false
+				for (int i = 0; i < BOX_COUNT; i++)
+				{
+					if (!boxes[i].isMain)
+					{
+						boxes[i].isWaterConnected = false;
+					}
+				}
+
+				// Update water present in the pipes
+				for (int i = 0; i < ROWS; i++)
+				{
+					for (int j = 0; j < ROWS; j++)
+					{
+						int index = GetBoxIndexByPos(boxes, (Vector2) { i, j });
+						if (boxes[index].isMain)
+						{
+							CheckForAdjacentBox(boxes, &boxes[index], (Vector2) { i, j }, visited);
+							break;
+						}
+					}
+				}
+
+				snprintf(levelText.text, sizeof levelText.text, "Level: %d", currentPuzzleIndex + 1);
+				snprintf(timeText.text, sizeof timeText.text, "Time: %1.4f", fireYoffset);
+				levelText.size = GetFontSize(mx16Font, levelText);
+				timeText.size = GetFontSize(mx16Font, timeText);
+
+				// Validate answer
+				puzzles[currentPuzzleIndex].isCorrect = true;
+				for (int i = 0; i < BOX_COUNT; i++)
+				{
+					if (!boxes[i].isWaterConnected)
+					{
+						puzzles[currentPuzzleIndex].isCorrect = false;
+					}
+				}
+
+				if (puzzles[currentPuzzleIndex].isCorrect)
+				{
+					currentPuzzleIndex += 1;
+					if (currentPuzzleIndex < TOTAL_PUZZLES)
+					{
+						fadeIn.isStarted = true;
+						fadeIn.to = WON;
+					}
+					else
+					{
+						fadeIn.isStarted = true;
+						fadeIn.to = END;
 					}
 				}
 			}
-
-			// Set all water connection to false
-			for (int i = 0; i < BOX_COUNT; i++)
-			{
-				if (!boxes[i].isMain)
-				{
-					boxes[i].isWaterConnected = false;
-				}
-			}
-
-			// Update water present in the pipes
-			for (int i = 0; i < ROWS; i++)
-			{
-				for (int j = 0; j < ROWS; j++)
-				{
-					int index = GetBoxIndexByPos(boxes, (Vector2) { i, j });
-					if (boxes[index].isMain)
-					{
-						CheckForAdjacentBox(boxes, &boxes[index], (Vector2) { i, j }, visited);
-						break;
-					}
-				}
-			}
-
-			// Validate answer
-			puzzles[currentPuzzleIndex].isCorrect = true;
-			for (int i = 0; i < BOX_COUNT; i++)
-			{
-				if (!boxes[i].isWaterConnected)
-				{
-					puzzles[currentPuzzleIndex].isCorrect = false;
-				}
-			}
-
-			if (puzzles[currentPuzzleIndex].isCorrect)
-			{
-				currentPuzzleIndex += 1;
-				if (currentPuzzleIndex < TOTAL_PUZZLES)
-				{
-					gameState = WON;
-				}
-				else
-				{
-					gameState = END;
-				}
-			}
-
-			snprintf(levelText.text, sizeof levelText.text, "Level: %d", currentPuzzleIndex);
-			snprintf(timeText.text, sizeof timeText.text, "Time: %1.4f", fireYoffset);
-			levelText.size = GetFontSize(mx16Font, levelText);
-			timeText.size = GetFontSize(mx16Font, timeText);
 
 			break;
 		case END:
 			break;
 		case WON:
-			if (IsKeyPressed(KEY_N))
-			{
-				InitBoxes(boxes, puzzles[currentPuzzleIndex]);
-				fireYoffset = 1.f;
-				gameState = PLAYING;
+			if (fadeOut.isCompleted && !fadeIn.isStarted) {
+				if (IsKeyPressed(KEY_N))
+				{
+					InitBoxes(boxes, puzzles[currentPuzzleIndex]);
+					fireYoffset = 1.f;
+					fadeIn.to = PLAYING;
+					fadeIn.isStarted = true;
+				}
 			}
+			
 			break;
 		case LOST:
 			UpdateMusicStream(fireMusic);
 
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { 0.5f }, SHADER_UNIFORM_FLOAT);
-			if (IsKeyPressed(KEY_R))
-			{
-				InitBoxes(boxes, puzzles[currentPuzzleIndex]);
-				fireYoffset = 1.f;
-				gameState = PLAYING;
+			if (fadeOut.isCompleted && !fadeIn.isStarted) {
+				if (IsKeyPressed(KEY_R))
+				{
+					InitBoxes(boxes, puzzles[currentPuzzleIndex]);
+					fireYoffset = 1.f;
+					fadeIn.to = PLAYING;
+					fadeIn.isStarted = true;
+				}
 			}
+			
 			break;
 		default:
 			break;
@@ -573,7 +628,6 @@ int main()
 		switch (gameState)
 		{
 		case START:
-			
 			DrawCustomText(mx16Font, playText);
 			DrawTexture(startPageTexture, 0, 0, whiteColor);
 			break;
@@ -597,6 +651,13 @@ int main()
 			break;
 		default:
 			break;
+		}
+		
+		// Draw transitions		
+		if (fadeOut.isStarted && !fadeOut.isCompleted) {
+			DrawRectangleV(fadeOut.pos, fadeOut.size, blackColor);
+		} else if (fadeIn.isStarted && !fadeIn.isCompleted) {
+			DrawRectangleV(fadeIn.pos, fadeIn.size, blackColor);
 		}
 		EndMode2D();
 		EndDrawing();
@@ -822,4 +883,18 @@ Vector2 GetFontSize(Font font, struct Text textData)
 void DrawCustomText(Font font, struct Text textData) 
 {
 	DrawTextPro(font, textData.text, textData.pos, textData.origin, 0.f, textData.fontSize, textData.spacing, textData.color);
+}
+
+void ResetFadeTransition(struct Transition* fade, bool isFadeOut) 
+{
+
+	fade->isCompleted = false;
+	
+	if (isFadeOut) {
+		fade->size = (Vector2){WINDOW_WIDTH, WINDOW_HEIGHT};
+		fade->isStarted = true;
+	} else {
+		fade->isStarted = false;
+		fade->size = (Vector2){WINDOW_WIDTH, 0};
+	}
 }
