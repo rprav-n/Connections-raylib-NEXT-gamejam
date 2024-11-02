@@ -125,15 +125,15 @@ int main()
 
 	Font mx16Font = LoadFont("assets/m6x11.ttf");
 
-	Sound wrenchSnd = LoadSound("assets/wrench.wav");
-	SetSoundVolume(wrenchSnd, 2.f);
+	Sound cardSnd = LoadSound("assets/card.wav");
+	SetSoundVolume(cardSnd, 2.f);
 
 	Music fireMusic = LoadMusicStream("assets/flame.mp3");
-	SetMusicVolume(fireMusic, 0.2f);
+	SetMusicVolume(fireMusic, 0.1f);
 	PlayMusicStream(fireMusic);
 
 	Music bgMusic = LoadMusicStream("assets/bg_music.ogg");
-	SetMusicVolume(bgMusic, 0.4f);
+	SetMusicVolume(bgMusic, 0.2f);
 	PlayMusicStream(bgMusic);
 
 	Shader fireShader = LoadShader(NULL, "assets/shaders/fire.fs");
@@ -469,7 +469,7 @@ int main()
 						{
 							RotateBox(&boxes[index]);
 							shouldCameraShake = true;
-							PlaySound(wrenchSnd);
+							PlaySound(cardSnd);
 
 							wrenchRotation += 90.f;
 						}
@@ -699,7 +699,7 @@ int main()
 	UnloadShader(fireShader);
 	UnloadMusicStream(bgMusic);
 	UnloadMusicStream(fireMusic);
-	UnloadSound(wrenchSnd);
+	UnloadSound(cardSnd);
 	UnloadFont(mx16Font);
 	UnloadTexture(noiseTexture);
 	UnloadTexture(bricksTexture);
