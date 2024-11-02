@@ -18,7 +18,7 @@
 #define BOX_COUNT 16
 #define START_POS (CELL_SIZE * SPACING)
 #define END_POS (BOX_COUNT * ROWS)
-#define TOTAL_PUZZLES 2
+#define TOTAL_PUZZLES 4
 #define FIRE_MOVE_SPEED 0.05f
 #define BUTTON_WIDTH 64
 #define BUTTON_HEIGHT 32
@@ -91,7 +91,10 @@ struct Text
 	char text[50];
 	float fontSize;
 	float spacing;
+	int speed;
+	Color color;
 	Vector2 pos;
+	Vector2 startPos;
 	Vector2 origin;
 	Vector2 size;
 };
@@ -118,6 +121,7 @@ int main()
 	Texture2D atlasTexture = LoadTexture("assets/atlas.png");
 	Texture2D bricksTexture = LoadTexture("assets/bricks.png");
 	Texture2D noiseTexture = LoadTexture("assets/noise.png");
+	Texture2D startPageTexture = LoadTexture("assets/start_page.png");
 
 
 	Font mx16Font = LoadFont("assets/m6x11.ttf");
@@ -138,10 +142,26 @@ int main()
 	// { 1.0f, 0.25f, 0.25f } valve red color = #ff4242
 	// { 1.0f, 0.5f, 0.0f } = orange colr = #ff8000
 	float orangeColorFloat[3] = { 1.0f, 0.5f, 0.0f };
+	Color blackColor = GetColor(0x000000ff);
+	Color whiteColor = GetColor(0xffffffff);
+	Color blueColor = GetColor(0x29adffff);
+	Color redColor = GetColor(0xff4242ff);
+	Color greenColor = GetColor(0x45e082ff);
+	Color orangeColor = GetColor(0xff8000ff);
+	Color darkBrownColor = GetColor(0x4d2b32ff);
+	Color lightBrownColor = GetColor(0x7a4841ff);
 
 	SetShaderValue(fireShader, GetShaderLocation(fireShader, "flameColor"), orangeColorFloat, SHADER_UNIFORM_VEC3);
 	SetShaderValue(fireShader, GetShaderLocation(fireShader, "animationSpeed"), (float[1]) { 0.5f }, SHADER_UNIFORM_FLOAT);
 	SetShaderValueTexture(fireShader, GetShaderLocation(fireShader, "texture0"), noiseTexture);
+
+	Camera2D camera = {};
+	camera.target = (Vector2){WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f};
+	camera.offset = (Vector2){WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f};
+	camera.rotation = 0.0f;
+	camera.zoom = 1.0f;
+
+	bool shouldCameraShake = false;
 
 	struct Player player = {
 		.pos = (Vector2){ (float)START_POS, (float)START_POS }
@@ -168,6 +188,24 @@ int main()
 		},
 		.isCorrect = false,
 	};
+	puzzles[2] = (struct Puzzle){
+		.puzzleGrid = {
+			{13, 6, 5, 12},
+			{10, 8, 6, 10},
+			{10, 9, 1, 5},
+			{4, 3, 11, 11}
+		},
+		.isCorrect = false,
+	};
+	puzzles[3] = (struct Puzzle){
+		.puzzleGrid = {
+			{11, 8, 6, 12},
+			{5, 10, 8, 9},
+			{11, 7, 12, 6},
+			{2, 5, 5, 11}
+		},
+		.isCorrect = false,
+	};
 
 	struct Box boxes[BOX_COUNT];
 
@@ -179,31 +217,25 @@ int main()
 
 
 	// Set all texts
-	struct Text titleText = 
-	{
-		.text = "Pipe Connections",
-		.fontSize = 64.f,
-		.spacing = 2.f
-	};
-	titleText.size = GetFontSize(mx16Font, titleText);
-	titleText.origin = GetFontOrigin(titleText);
-	titleText.pos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT/3.f};
-
 	struct Text playText = 
 	{
 		.text = "Press 'P' to play",
 		.fontSize = 32.f,
-		.spacing = 1.f
+		.spacing = 1.f,
+		.color = whiteColor,
+		.speed = 20,
 	};
 	playText.size = GetFontSize(mx16Font, playText);
 	playText.origin = GetFontOrigin(playText);
-	playText.pos = (Vector2){WINDOW_WIDTH/2.f, titleText.pos.y + titleText.size.y + 10.f};
+	playText.pos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT - 200.f};
+	playText.startPos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT - 200.f};
 
 	struct Text levelText = 
 	{
 		.text = "Level: 1",
 		.fontSize = 32.f,
-		.spacing = 1.f
+		.spacing = 1.f,
+		.color = whiteColor,
 	};
 	levelText.size = GetFontSize(mx16Font, levelText);
 	levelText.origin = (Vector2){0.f, 0.f};
@@ -213,7 +245,8 @@ int main()
 	{
 		.text = "Time: 1.0000",
 		.fontSize = 32.f,
-		.spacing = 1.f
+		.spacing = 1.f,
+		.color = whiteColor,
 	};
 	timeText.size = GetFontSize(mx16Font, timeText);
 	timeText.origin = (Vector2){0.f, 0.f};
@@ -223,7 +256,8 @@ int main()
 	{
 		.text = "BURNNNN'd",
 		.fontSize = 64.f,
-		.spacing = 2.f
+		.spacing = 2.f,
+		.color = whiteColor,
 	};
 	burnedText.size = GetFontSize(mx16Font, burnedText);
 	burnedText.origin = GetFontOrigin(burnedText);
@@ -233,7 +267,8 @@ int main()
 	{
 		.text = "Press 'R' to restart",
 		.fontSize = 32.f,
-		.spacing = 1.f
+		.spacing = 1.f,
+		.color = whiteColor,
 	};
 	restartText.size = GetFontSize(mx16Font, restartText);
 	restartText.origin = GetFontOrigin(restartText);
@@ -243,7 +278,8 @@ int main()
 	{
 		.text = "Doused!",
 		.fontSize = 64.f,
-		.spacing = 2.f
+		.spacing = 2.f,
+		.color = greenColor,
 	};
 	wonText.size = GetFontSize(mx16Font, wonText);
 	wonText.origin = GetFontOrigin(wonText);
@@ -253,7 +289,8 @@ int main()
 	{
 		.text = "Press 'N' for next level",
 		.fontSize = 32.f,
-		.spacing = 1.f
+		.spacing = 1.f,
+		.color = whiteColor,
 	};
 	nextText.size = GetFontSize(mx16Font, nextText);
 	nextText.origin = GetFontOrigin(nextText);
@@ -263,17 +300,21 @@ int main()
 	{
 		.text = "Thank you for playing my game!",
 		.fontSize = 48.f,
-		.spacing = 2.f
+		.spacing = 2.f,
+		.color = whiteColor,
 	};
 	endText.size = GetFontSize(mx16Font, endText);
 	endText.origin = GetFontOrigin(endText);
-	endText.pos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT/4.f};
+	endText.pos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT/6.f};
 
 	enum State gameState = START;
 
 	//DisableCursor();
 
 	SetTargetFPS(FPS);
+	
+	float shakeDuration = 0.0f;
+    float shakeIntensity = 4.0f;
 
 	while (!WindowShouldClose())
 	{
@@ -281,12 +322,50 @@ int main()
 		float dt = GetFrameTime();
 		time += dt;
 
+		if (IsKeyPressed(KEY_G)) {
+			shouldCameraShake = true;
+		}
+
+		if (shouldCameraShake)
+        {
+            shakeDuration = 0.05f;
+            shakeIntensity = 1.f;
+        }
+
+		if (shakeDuration > 0.0f)
+        {
+            float offsetX = GetRandomValue(-shakeIntensity, shakeIntensity);
+            float offsetY = GetRandomValue(-shakeIntensity, shakeIntensity);
+
+            // Apply shake effect to camera target
+            camera.target.x += offsetX;
+            camera.target.y += offsetY;
+
+            shakeDuration -= dt;
+            shouldCameraShake = false;
+        }
+        else
+        {
+            camera.target = Vector2MoveTowards(camera.target, (Vector2){WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f}, 200 * dt);
+        }
+
+
 		UpdateMusicStream(bgMusic);
 
 		// Update Code
 		switch (gameState)
 		{
 		case START:
+
+			playText.pos.y += playText.speed * dt;
+			if (playText.pos.y > playText.startPos.y + 30.f || playText.pos.y < playText.startPos.y) {
+				playText.speed *= -1;
+			}
+
+			UpdateMusicStream(fireMusic);
+
+			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &time, SHADER_UNIFORM_FLOAT);
+			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { 0.65f }, SHADER_UNIFORM_FLOAT);
 			if (IsKeyPressed(KEY_P))
 			{
 				gameState = PLAYING;
@@ -345,6 +424,7 @@ int main()
 						&& !puzzles[currentPuzzleIndex].isCorrect && !puzzles[currentPuzzleIndex].isLost)
 					{
 						RotateBox(&boxes[index]);
+						shouldCameraShake = true;
 						PlaySound(wrenchSnd);
 
 						wrenchRotation += 90.f;
@@ -398,7 +478,7 @@ int main()
 				}
 			}
 
-			snprintf(levelText.text, sizeof levelText.text, "Level: %d", currentPuzzleIndex + 1);
+			snprintf(levelText.text, sizeof levelText.text, "Level: %d", currentPuzzleIndex);
 			snprintf(timeText.text, sizeof timeText.text, "Time: %1.4f", fireYoffset);
 			levelText.size = GetFontSize(mx16Font, levelText);
 			timeText.size = GetFontSize(mx16Font, timeText);
@@ -431,26 +511,30 @@ int main()
 		}
 
 		BeginTextureMode(renderTexture);
-		ClearBackground(RAYWHITE);
+		ClearBackground(whiteColor);
 
 		// Draw brickS
-		DrawTexture(bricksTexture, 0, 0, WHITE);
+		DrawTexture(bricksTexture, 0, 0, whiteColor);
 
 		switch (gameState)
 		{
 		case START:
+			// Draw fire
+			BeginShaderMode(fireShader);
+			DrawTexture(noiseTexture, 0, 0, whiteColor);
+			EndShaderMode();
 			break;
 		case PLAYING:
 			// Draw fire
 			BeginShaderMode(fireShader);
-			DrawTexture(noiseTexture, 0, 0, WHITE);
+			DrawTexture(noiseTexture, 0, 0, whiteColor);
 			EndShaderMode();
 
 			// Draw boxes
 			DrawBoxes(boxes, atlasTexture);
 
 			// Draw player
-			DrawRectangleLines(player.pos.x, player.pos.y, CELL_SIZE, CELL_SIZE, WHITE);			
+			DrawRectangleLines(player.pos.x, player.pos.y, CELL_SIZE, CELL_SIZE, whiteColor);			
 			break;
 		case END:
 			DrawBoxes(boxes, atlasTexture);
@@ -461,7 +545,7 @@ int main()
 		case LOST:
 			DrawBoxes(boxes, atlasTexture);
 			BeginShaderMode(fireShader);
-			DrawTexture(noiseTexture, 0, 0, WHITE);
+			DrawTexture(noiseTexture, 0, 0, whiteColor);
 			EndShaderMode();
 			break;
 		default:
@@ -472,24 +556,26 @@ int main()
 
 		
 		BeginDrawing();
-		ClearBackground(RAYWHITE);
+		ClearBackground(darkBrownColor);
 
+		BeginMode2D(camera);
+		
 		
 		Rectangle source = { 0.0f, 0.0f, (float)renderTexture.texture.width, (float)-renderTexture.texture.height };
 		Rectangle dest = { 0, 0, (float)WINDOW_WIDTH, (float)WINDOW_HEIGHT };
 
-		DrawTexturePro(renderTexture.texture, source, dest, (Vector2) { 0, 0 }, 0.f, WHITE);
+		DrawTexturePro(renderTexture.texture, source, dest, (Vector2) { 0, 0 }, 0.f, whiteColor);
 
 		// Draw custom cursor
 		/*Vector2 mousePosition = GetMousePosition();
-		DrawTextureEx(wrenchTexture, mousePosition, 0.f, 4.f, WHITE);*/
+		DrawTextureEx(wrenchTexture, mousePosition, 0.f, 4.f, whiteColor);*/
 
 		switch (gameState)
 		{
 		case START:
 			
-			DrawCustomText(mx16Font, titleText);
 			DrawCustomText(mx16Font, playText);
+			DrawTexture(startPageTexture, 0, 0, whiteColor);
 			break;
 		
 		case PLAYING:
@@ -512,7 +598,7 @@ int main()
 		default:
 			break;
 		}
-
+		EndMode2D();
 		EndDrawing();
 	}
 
@@ -735,5 +821,5 @@ Vector2 GetFontSize(Font font, struct Text textData)
 
 void DrawCustomText(Font font, struct Text textData) 
 {
-	DrawTextPro(font, textData.text, textData.pos, textData.origin, 0.f, textData.fontSize, textData.spacing, WHITE);
+	DrawTextPro(font, textData.text, textData.pos, textData.origin, 0.f, textData.fontSize, textData.spacing, textData.color);
 }
