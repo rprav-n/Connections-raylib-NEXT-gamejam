@@ -222,7 +222,7 @@ int main()
 	// Set all texts
 	struct Text playText = 
 	{
-		.text = "Press 'P' to play",
+		.text = "'Left Click' to play",
 		.fontSize = 32.f,
 		.spacing = 1.f,
 		.color = whiteColor,
@@ -268,7 +268,7 @@ int main()
 
 	struct Text restartText = 
 	{
-		.text = "Press 'R' to restart",
+		.text = "'Left Click' to restart",
 		.fontSize = 32.f,
 		.spacing = 1.f,
 		.color = whiteColor,
@@ -290,7 +290,7 @@ int main()
 
 	struct Text nextText = 
 	{
-		.text = "Press 'N' for next level",
+		.text = "'Left Click' for next level",
 		.fontSize = 32.f,
 		.spacing = 1.f,
 		.color = whiteColor,
@@ -397,7 +397,7 @@ int main()
 				if (playText.pos.y > playText.startPos.y + 30.f || playText.pos.y < playText.startPos.y) {
 					playText.speed *= -1;
 				}
-				if (IsKeyPressed(KEY_P))
+				if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
 				{
 					currentLevelTime = puzzles[currentPuzzleIndex].levelTime;
 					fadeIn.to = PLAYING;
@@ -535,7 +535,7 @@ int main()
 			break;
 		case WON:
 			if (fadeOut.isCompleted && !fadeIn.isStarted) {
-				if (IsKeyPressed(KEY_N))
+				if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
 				{
 					InitBoxes(boxes, puzzles[currentPuzzleIndex]);
 					currentLevelTime = puzzles[currentPuzzleIndex].levelTime;
@@ -552,7 +552,7 @@ int main()
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &fireTime, SHADER_UNIFORM_FLOAT);
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { 0.5f }, SHADER_UNIFORM_FLOAT);
 			if (fadeOut.isCompleted && !fadeIn.isStarted) {
-				if (IsKeyPressed(KEY_R))
+				if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
 				{
 					InitBoxes(boxes, puzzles[currentPuzzleIndex]);
 					currentLevelTime = puzzles[currentPuzzleIndex].levelTime;
