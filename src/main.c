@@ -30,6 +30,7 @@ enum Direction
 enum State
 {
 	START,
+	HOWTO,
 	PLAYING,
 	END,
 	WON,
@@ -121,6 +122,7 @@ int main()
 	Texture2D bricksTexture = LoadTexture("assets/bricks.png");
 	Texture2D noiseTexture = LoadTexture("assets/noise.png");
 	Texture2D startPageTexture = LoadTexture("assets/start_page.png");
+	Texture2D helpPageTexture = LoadTexture("assets/help_page.png");
 
 
 	Font mx16Font = LoadFont("assets/m6x11.ttf");
@@ -232,6 +234,7 @@ int main()
 	playText.origin = GetFontOrigin(playText);
 	playText.pos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT - 200.f};
 	playText.startPos = (Vector2){WINDOW_WIDTH/2.f, WINDOW_HEIGHT - 200.f};
+
 
 	struct Text levelText = 
 	{
@@ -400,7 +403,7 @@ int main()
 				if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
 				{
 					currentLevelTime = puzzles[currentPuzzleIndex].levelTime;
-					fadeIn.to = PLAYING;
+					fadeIn.to = HOWTO;
 					fadeIn.isStarted = true;
 				}
 			}
@@ -408,6 +411,21 @@ int main()
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "time"), &fireTime, SHADER_UNIFORM_FLOAT);
 			SetShaderValue(fireShader, GetShaderLocation(fireShader, "yOffset"), (float[1]) { 0.65f }, SHADER_UNIFORM_FLOAT);
 			
+			break;
+		case HOWTO:
+			if (fadeOut.isCompleted && !fadeIn.isStarted) {
+				playText.pos.y += playText.speed * dt;
+				if (playText.pos.y > playText.startPos.y + 30.f || playText.pos.y < playText.startPos.y) {
+					playText.speed *= -1;
+				}
+				if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+				{
+					currentLevelTime = puzzles[currentPuzzleIndex].levelTime;
+					fadeIn.to = PLAYING;
+					fadeIn.isStarted = true;
+				}
+			}
+			UpdateMusicStream(fireMusic);
 			break;
 		case PLAYING:
 			currentLevelTime -= dt;
@@ -664,7 +682,10 @@ int main()
 			DrawCustomText(mx16Font, playText);
 			DrawTexture(startPageTexture, 0, 0, whiteColor);
 			break;
-		
+		case HOWTO:
+			DrawTexture(helpPageTexture, 0, 0, whiteColor);
+			DrawCustomText(mx16Font, playText);
+			break;
 		case PLAYING:
 			DrawCustomText(mx16Font, levelText);
 			DrawCustomText(mx16Font, timeText);
@@ -701,6 +722,8 @@ int main()
 	UnloadMusicStream(fireMusic);
 	UnloadSound(cardSnd);
 	UnloadFont(mx16Font);
+	UnloadTexture(helpPageTexture);
+	UnloadTexture(startPageTexture);
 	UnloadTexture(noiseTexture);
 	UnloadTexture(bricksTexture);
 	UnloadTexture(atlasTexture);
